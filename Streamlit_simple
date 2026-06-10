@@ -1,0 +1,147 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
+from Output_Simple import run_all_products, load_all_inputs
+
+st.set_page_config(layout="wide")
+
+st.title("Multi‑Product Production Planning")
+
+# ==============================
+# 参数输入
+# ==============================
+
+st.sidebar.header("Planning Parameters")
+
+target_reach = st.sidebar.slider(
+    "Target Reach Level",
+    min_value=1,
+    max_value=8,
+    value=4
+)
+
+tester_capacity = st.sidebar.number_input(
+    "Tester Capacity",
+    value=10
+)
+
+# ==============================
+# Excel输入
+# ==============================
+
+uploaded = st.file_uploader(
+    "Upload Planning Excel",
+    type="xlsx"
+)
+
+if uploaded is None:
+    st.stop()
+
+excel_path = "temp.xlsx"
+
+with open(excel_path, "wb") as f:
+    f.write(uploaded.getbuffer())
+
+# ==============================
+# 读取模型输入
+# ==============================
+
+stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map = load_all_inputs(excel_path)
+
+tester_config["target_REACH"] = target_reach
+tester_config["available"] = tester_capacity
+
+# ==============================
+# 运行模型
+# ==============================
+
+if st.button("Run Planning Model"):
+
+    all_plan_df, summary_df, monthly_summary_df, skipped_df = run_all_products(
+        stages,
+        products,
+        weekly_demand_map,
+        month_label_map,
+        tester_config,
+        inventory_map,
+    )
+
+    st.success("Planning Completed")
+
+    # ==============================
+    # Production Table
+    # ==============================
+
+    st.subheader("Production Plan")
+
+    st.dataframe(all_plan_df)
+
+    # ==============================
+    # VRFC Demand
+    # ==============================
+
+    st.subheader("VRFC Demand")
+
+    fig = px.bar(
+        monthly_summary_df,
+        x="Month",
+        y="Demand",
+        color="Product"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ==============================
+    # Tester Used
+    # ==============================
+
+    st.subheader("Tester Used")
+
+    fig = px.bar(
+        monthly_summary_df,
+        x="Month",
+        y="Max_TesterUsed",
+        color="Product"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ==============================
+    # Reach Level
+    # ==============================
+
+    st.subheader("Reach Level Development")
+
+    fig = px.line(
+        monthly_summary_df,
+        x="Month",
+        y="Avg_REACH",
+        color="Product",
+        markers=True
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ==============================
+    # DC Stock
+    # ==============================
+
+    st.subheader("DC Stock Development")
+
+    fig = px.bar(
+        monthly_summary_df,
+        x="Month",
+        y="End_Stock",
+        color="Product"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ==============================
+    # Summary
+    # ==============================
+
+    st.subheader("Planning Summary")
+
+    st.dataframe(summary_df)
