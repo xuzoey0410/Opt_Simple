@@ -1,54 +1,53 @@
-
----
-
-```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import tempfile
 from pathlib import Path
 
-# 导入你的生产规划代码
+# 你的计算代码
 from Output_Simple import load_all_inputs, run_all_products
 
 st.set_page_config(layout="wide")
 
-st.title("Production Planning Tool")
+st.title("Production Planning Dashboard")
 
 st.markdown(
 """
-Upload your Excel planning file or use the sample file.
-You can also adjust key parameters before running the model.
+Upload your Excel planning file or use the default sample file in the repository.
 """
 )
 
-# ------------------------------
-# 上传 Excel 输入
-# ------------------------------
+# -----------------------------
+# 默认 Excel（放在 GitHub repo）
+# -----------------------------
+
+DEFAULT_EXCEL = Path("All_Output1.xlsx")
 
 uploaded_file = st.file_uploader(
-    "Upload Input Excel",
-    type=["xlsx"]
+    "Upload Input Excel (optional)",
+    type="xlsx"
 )
 
-if uploaded_file is None:
-    st.warning("Please upload an Excel file to start.")
+# 如果用户上传文件就用上传的
+if uploaded_file:
+    excel_path = uploaded_file
+
+# 否则使用 repo 中默认 Excel
+elif DEFAULT_EXCEL.exists():
+    excel_path = DEFAULT_EXCEL
+
+else:
+    st.error("No Excel input file found.")
     st.stop()
 
-# 保存上传文件
-tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-tmp.write(uploaded_file.read())
-excel_path = Path(tmp.name)
-
-# ------------------------------
+# -----------------------------
 # 读取 Excel 输入
-# ------------------------------
+# -----------------------------
 
 stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map = load_all_inputs(excel_path)
 
-# ------------------------------
-# 参数调整（网页输入）
-# ------------------------------
+# -----------------------------
+# 参数调整
+# -----------------------------
 
 st.sidebar.header("Planning Parameters")
 
@@ -63,7 +62,7 @@ target_reach = st.sidebar.number_input(
 )
 
 reach_window = st.sidebar.number_input(
-    "Reach Window (weeks)",
+    "Reach Window",
     value=tester_config["reach_window"]
 )
 
@@ -71,9 +70,9 @@ tester_config["available"] = tester_capacity
 tester_config["target_REACH"] = target_reach
 tester_config["reach_window"] = reach_window
 
-# ------------------------------
+# -----------------------------
 # 运行模型
-# ------------------------------
+# -----------------------------
 
 if st.button("Run Production Planning"):
 
@@ -88,25 +87,22 @@ if st.button("Run Production Planning"):
 
     st.success("Planning Completed")
 
-    # ------------------------------
-    # 表格输出
-    # ------------------------------
+    # -----------------------------
+    # 输出表
+    # -----------------------------
 
     st.subheader("All Product Plan")
-
     st.dataframe(all_plan_df)
 
     st.subheader("Monthly Summary")
-
     st.dataframe(monthly_summary_df)
 
     st.subheader("Summary")
-
     st.dataframe(summary_df)
 
-    # ------------------------------
-    # 图表：VRFC Demand
-    # ------------------------------
+    # -----------------------------
+    # VRFC Demand
+    # -----------------------------
 
     st.subheader("VRFC Demand")
 
@@ -120,9 +116,9 @@ if st.button("Run Production Planning"):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ------------------------------
-    # 图表：Tester Used
-    # ------------------------------
+    # -----------------------------
+    # Tester Used
+    # -----------------------------
 
     st.subheader("Tester Used")
 
@@ -131,14 +127,14 @@ if st.button("Run Production Planning"):
         x="Month",
         y="Max_TesterUsed",
         color="Product",
-        title="Tester Usage"
+        title="Tester Used"
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ------------------------------
-    # 图表：Reach Level
-    # ------------------------------
+    # -----------------------------
+    # Reach Level
+    # -----------------------------
 
     st.subheader("Reach Level Development")
 
@@ -153,9 +149,9 @@ if st.button("Run Production Planning"):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ------------------------------
-    # 图表：DC Stock
-    # ------------------------------
+    # -----------------------------
+    # DC Stock
+    # -----------------------------
 
     st.subheader("DC Stock Development")
 
@@ -169,9 +165,9 @@ if st.button("Run Production Planning"):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ------------------------------
-    # 下载结果
-    # ------------------------------
+    # -----------------------------
+    # 下载 Excel
+    # -----------------------------
 
     output_file = "planning_output.xlsx"
 
