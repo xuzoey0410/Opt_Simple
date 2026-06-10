@@ -7,8 +7,8 @@ import plotly.express as px
 import streamlit as st
 from openpyxl.chart import AreaChart, BarChart, LineChart, Reference
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 import Output_Simple as planner
 
@@ -17,9 +17,8 @@ APP_DIR = Path(__file__).parent
 SAMPLE_INPUT = APP_DIR / "input_sample.xlsx"
 LOCAL_INPUT = APP_DIR / "All_Output1.xlsx"
 
-
-st.set_page_config(page_title="Production Planner", layout="wide")
-st.title("Production Planner")
+st.set_page_config(page_title="Output Simple Planner", layout="wide")
+st.title("Output Simple Planner")
 
 
 def sheet_name(excel_file, target):
@@ -116,22 +115,27 @@ def build_wafer_start_table(monthly_summary_df):
         margins_name="Grand Total",
     ).reset_index()
 
-    table_df = table_df.rename(columns={"Basic_Type": "Basic Type", "Product_Key": "Row Labels"})
-    return table_df
+    return table_df.rename(columns={"Basic_Type": "Basic Type", "Product_Key": "Row Labels"})
 
 
-def build_bump_sort_dps_table(monthly_summary_df):
+def build_stage_output_table(monthly_summary_df):
+    metric_options = [
+        ("Bump_Wafer", "Bump"),
+        ("Sort_Wafer", "Sort"),
+        ("Testing_Wafer", "Sort / Testing"),
+        ("DPS_Chip", "DPS"),
+        ("DPS_Output", "DPS"),
+        ("Output", "DPS"),
+    ]
+    metric_map = {col: label for col, label in metric_options if col in monthly_summary_df.columns}
+
     long_df = monthly_summary_df.melt(
         id_vars=["Basic_Type", "Product_Key", "Month"],
-        value_vars=["Bump_Wafer", "Sort_Wafer", "DPS_Chip"],
+        value_vars=list(metric_map.keys()),
         var_name="Metric",
         value_name="Value",
     )
-    long_df["Metric"] = long_df["Metric"].replace({
-        "Bump_Wafer": "Bump",
-        "Sort_Wafer": "Sort",
-        "DPS_Chip": "DPS",
-    })
+    long_df["Metric"] = long_df["Metric"].map(metric_map)
 
     table_df = long_df.pivot_table(
         index=["Basic_Type", "Product_Key", "Metric"],
@@ -213,10 +217,7 @@ def add_table_block(worksheet, title, output_df, start_row):
 def add_excel_chart(worksheet, title, chart_kind, header_row, last_row, last_col, anchor):
     headers = [worksheet.cell(row=header_row, column=col).value for col in range(1, last_col + 1)]
     overlay_col = headers.index("Next Month Demand") + 1 if "Next Month Demand" in headers else None
-    chart_last_col = last_col
-
-    if overlay_col:
-        chart_last_col = overlay_col - 1
+    chart_last_col = overlay_col - 1 if overlay_col else last_col
     if worksheet.cell(row=header_row, column=chart_last_col).value == "Grand Total":
         chart_last_col -= 1
     if chart_last_col < 2 or last_row <= header_row:
@@ -255,13 +256,13 @@ def style_excel_sheet(worksheet):
     style_excel_range(worksheet, 1, worksheet.max_row, worksheet.max_column)
 
 
-def make_output_bytes(graph_outputs, wafer_start_table, bump_sort_dps_table):
+def make_output_bytes(graph_outputs, wafer_start_table, stage_output_table):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         wafer_start_table.to_excel(writer, sheet_name="Wafer_Start", index=False)
-        bump_sort_dps_table.to_excel(writer, sheet_name="Bump_Sort_DPS", index=False)
+        stage_output_table.to_excel(writer, sheet_name="Bump_Testing_DPS", index=False)
         style_excel_sheet(writer.book["Wafer_Start"])
-        style_excel_sheet(writer.book["Bump_Sort_DPS"])
+        style_excel_sheet(writer.book["Bump_Testing_DPS"])
 
         graph_sheet = writer.book.create_sheet("Graph", 0)
         for start_row, (title, graph_df, chart_kind) in zip([1, 30, 59, 88], graph_outputs):
@@ -320,12 +321,7 @@ def draw_graphs(graph_outputs):
         if chart_kind == "stock":
             demand_line = chart_df[["Row Labels", "Next Month Demand"]].copy()
             product_cols = [col for col in chart_df.columns if col not in ["Row Labels", "Grand Total", "Next Month Demand"]]
-            chart_df = chart_df.melt(
-                id_vars="Row Labels",
-                value_vars=product_cols,
-                var_name="Product",
-                value_name=title,
-            )
+            chart_df = chart_df.melt(id_vars="Row Labels", value_vars=product_cols, var_name="Product", value_name=title)
             chart = px.bar(chart_df, x="Row Labels", y=title, color="Product", title=title)
             chart.update_layout(barmode="stack")
             chart.add_scatter(
@@ -337,7 +333,7 @@ def draw_graphs(graph_outputs):
                 marker={"size": 8},
             )
             chart.update_layout(xaxis_title="Month", yaxis_title="Stock / Next Month Demand")
-            st.plotly_chart(chart, use_container_width=True)
+            st.plotly_chart(chart, width="stretch")
             continue
 
         chart_df = chart_df.melt(id_vars="Row Labels", var_name="Product", value_name=title)
@@ -345,28 +341,16 @@ def draw_graphs(graph_outputs):
 
         if chart_kind == "line":
             chart = px.line(chart_df, x="Row Labels", y=title, color="Product", markers=True, title=title)
-        elif chart_kind == "area":
-            chart = px.area(chart_df, x="Row Labels", y=title, color="Product", title=title)
         else:
             chart = px.bar(chart_df, x="Row Labels", y=title, color="Product", title=title)
             chart.update_layout(barmode="stack")
 
         chart.update_layout(xaxis_title="Month", yaxis_title=title)
-        st.plotly_chart(chart, use_container_width=True)
+        st.plotly_chart(chart, width="stretch")
 
 
 uploaded = st.sidebar.file_uploader("Upload input Excel", type=["xlsx"])
 file_bytes = uploaded.getvalue() if uploaded else None
-
-with st.sidebar:
-    st.header("Optimization")
-    planner.OPTIMIZER_MAXITER = st.number_input("Max iterations", min_value=1, max_value=500, value=int(planner.OPTIMIZER_MAXITER), step=10)
-    planner.TESTER_LEVEL_WEIGHT = st.number_input("Tester level weight", min_value=0.0, value=float(planner.TESTER_LEVEL_WEIGHT), step=0.01)
-    planner.TESTER_CHANGE_WEIGHT = st.number_input("Tester change weight", min_value=0.0, value=float(planner.TESTER_CHANGE_WEIGHT), step=0.1)
-    planner.TESTER_JUMP_WEIGHT = st.number_input("Tester jump weight", min_value=0.0, value=float(planner.TESTER_JUMP_WEIGHT), step=1.0)
-    planner.WAFER_CHANGE_WEIGHT = st.number_input("Wafer change weight", min_value=0.0, value=float(planner.WAFER_CHANGE_WEIGHT), step=1.0)
-    planner.WAFER_CHANGE_LIMIT = st.number_input("Wafer change limit", min_value=0.0, max_value=1.0, value=float(planner.WAFER_CHANGE_LIMIT), step=0.05)
-
 
 try:
     tables = load_tables(file_bytes)
@@ -375,31 +359,29 @@ except Exception as exc:
     st.stop()
 
 if tables is None:
-    st.info("Please upload an input Excel file from the sidebar, or add input_sample.xlsx to the GitHub repo.")
+    st.info("Please upload an input Excel file from the sidebar, or add input_sample.xlsx to the repo.")
     st.stop()
 
 target_reach_default = float(target_value(tables["target"], "Target Reach Level", planner.DEFAULT_TESTER_CONFIG["target_REACH"]))
 tester_number_default = int(target_value(tables["target"], "Tester Number", planner.DEFAULT_TESTER_CONFIG["available"]))
 
-top_cols = st.columns(2)
-with top_cols[0]:
+with st.sidebar:
+    st.header("Planning Inputs")
     target_reach = st.number_input("Target Reach Level", min_value=0.0, value=target_reach_default, step=0.5)
-with top_cols[1]:
     tester_number = st.number_input("Tester Number", min_value=1, value=tester_number_default, step=1)
 
 tabs = st.tabs(["Flow", "Product", "Demand", "Inventory"])
 with tabs[0]:
-    flow_df = st.data_editor(tables["flow"], use_container_width=True, num_rows="dynamic", key="flow")
+    flow_df = st.data_editor(tables["flow"], width="stretch", num_rows="dynamic", key="simple_flow")
 with tabs[1]:
-    product_df = st.data_editor(tables["product"], use_container_width=True, num_rows="dynamic", key="product")
+    product_df = st.data_editor(tables["product"], width="stretch", num_rows="dynamic", key="simple_product")
 with tabs[2]:
-    demand_df = st.data_editor(tables["demand"], use_container_width=True, num_rows="dynamic", key="demand")
+    demand_df = st.data_editor(tables["demand"], width="stretch", num_rows="dynamic", key="simple_demand")
 with tabs[3]:
-    inventory_df = st.data_editor(tables["inventory"], use_container_width=True, num_rows="dynamic", key="inventory")
+    inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", key="simple_inventory")
 
-
-if st.button("Run plan", type="primary"):
-    with st.spinner("Running optimization..."):
+if st.button("Run simple plan", type="primary"):
+    with st.spinner("Running simple reach-based plan..."):
         try:
             input_path = build_input_workbook(flow_df, product_df, demand_df, inventory_df, target_reach, tester_number)
             stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map = planner.load_all_inputs(input_path)
@@ -411,22 +393,29 @@ if st.button("Run plan", type="primary"):
     all_plan_df, summary_df, monthly_summary_df, skipped_df = results
     graph_outputs = build_graph_outputs(monthly_summary_df)
     wafer_start_table = build_wafer_start_table(monthly_summary_df)
-    bump_sort_dps_table = build_bump_sort_dps_table(monthly_summary_df)
-    output_bytes = make_output_bytes(graph_outputs, wafer_start_table, bump_sort_dps_table)
+    stage_output_table = build_stage_output_table(monthly_summary_df)
+    output_bytes = make_output_bytes(graph_outputs, wafer_start_table, stage_output_table)
 
     st.success("Plan generated")
 
     draw_graphs(graph_outputs)
 
     st.subheader("Wafer Start")
-    st.dataframe(style_display_table(wafer_start_table), use_container_width=True)
+    st.dataframe(style_display_table(wafer_start_table), width="stretch")
 
-    st.subheader("Bump Sort DPS")
-    st.dataframe(style_display_table(bump_sort_dps_table), use_container_width=True)
+    st.subheader("Bump Testing DPS")
+    st.dataframe(style_display_table(stage_output_table), width="stretch")
+
+    with st.expander("Summary"):
+        st.dataframe(summary_df, width="stretch")
+
+    if not skipped_df.empty:
+        with st.expander("Skipped Products"):
+            st.dataframe(skipped_df, width="stretch")
 
     st.download_button(
-        "Download Final Output Excel",
+        "Download Simple Output Excel",
         data=output_bytes,
-        file_name="final_output_graphs_tables.xlsx",
+        file_name="output_simple_streamlit_result.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
