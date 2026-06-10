@@ -1,40 +1,81 @@
+
+---
+
+```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import tempfile
 from pathlib import Path
 
-# 导入你现有的生产规划代码
+# 导入你的生产规划代码
 from Output_Simple import load_all_inputs, run_all_products
 
 st.set_page_config(layout="wide")
 
-st.title("Production Planning Dashboard")
+st.title("Production Planning Tool")
 
-# -----------------------------
-# 上传 Excel
-# -----------------------------
+st.markdown(
+"""
+Upload your Excel planning file or use the sample file.
+You can also adjust key parameters before running the model.
+"""
+)
+
+# ------------------------------
+# 上传 Excel 输入
+# ------------------------------
 
 uploaded_file = st.file_uploader(
-    "Upload Planning Excel",
+    "Upload Input Excel",
     type=["xlsx"]
 )
 
 if uploaded_file is None:
-    st.info("Please upload Excel input file.")
+    st.warning("Please upload an Excel file to start.")
     st.stop()
 
-excel_path = Path("temp_input.xlsx")
+# 保存上传文件
+tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+tmp.write(uploaded_file.read())
+excel_path = Path(tmp.name)
 
-with open(excel_path, "wb") as f:
-    f.write(uploaded_file.getbuffer())
+# ------------------------------
+# 读取 Excel 输入
+# ------------------------------
 
-# -----------------------------
+stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map = load_all_inputs(excel_path)
+
+# ------------------------------
+# 参数调整（网页输入）
+# ------------------------------
+
+st.sidebar.header("Planning Parameters")
+
+tester_capacity = st.sidebar.number_input(
+    "Tester Capacity",
+    value=tester_config["available"]
+)
+
+target_reach = st.sidebar.number_input(
+    "Target Reach Level",
+    value=tester_config["target_REACH"]
+)
+
+reach_window = st.sidebar.number_input(
+    "Reach Window (weeks)",
+    value=tester_config["reach_window"]
+)
+
+tester_config["available"] = tester_capacity
+tester_config["target_REACH"] = target_reach
+tester_config["reach_window"] = reach_window
+
+# ------------------------------
 # 运行模型
-# -----------------------------
+# ------------------------------
 
 if st.button("Run Production Planning"):
-
-    stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map = load_all_inputs(excel_path)
 
     all_plan_df, summary_df, monthly_summary_df, skipped_df = run_all_products(
         stages,
@@ -47,17 +88,25 @@ if st.button("Run Production Planning"):
 
     st.success("Planning Completed")
 
-    # -----------------------------
-    # Production Plan Table
-    # -----------------------------
+    # ------------------------------
+    # 表格输出
+    # ------------------------------
 
-    st.subheader("Production Plan")
+    st.subheader("All Product Plan")
 
     st.dataframe(all_plan_df)
 
-    # -----------------------------
-    # VRFC Demand
-    # -----------------------------
+    st.subheader("Monthly Summary")
+
+    st.dataframe(monthly_summary_df)
+
+    st.subheader("Summary")
+
+    st.dataframe(summary_df)
+
+    # ------------------------------
+    # 图表：VRFC Demand
+    # ------------------------------
 
     st.subheader("VRFC Demand")
 
@@ -65,14 +114,15 @@ if st.button("Run Production Planning"):
         monthly_summary_df,
         x="Month",
         y="Demand",
-        color="Product"
+        color="Product",
+        title="VRFC Demand"
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # -----------------------------
-    # Tester Used
-    # -----------------------------
+    # ------------------------------
+    # 图表：Tester Used
+    # ------------------------------
 
     st.subheader("Tester Used")
 
@@ -80,14 +130,15 @@ if st.button("Run Production Planning"):
         monthly_summary_df,
         x="Month",
         y="Max_TesterUsed",
-        color="Product"
+        color="Product",
+        title="Tester Usage"
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # -----------------------------
-    # Reach Level Development
-    # -----------------------------
+    # ------------------------------
+    # 图表：Reach Level
+    # ------------------------------
 
     st.subheader("Reach Level Development")
 
@@ -96,14 +147,15 @@ if st.button("Run Production Planning"):
         x="Month",
         y="Avg_REACH",
         color="Product",
-        markers=True
+        markers=True,
+        title="Reach Level"
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # -----------------------------
-    # DC Stock Development
-    # -----------------------------
+    # ------------------------------
+    # 图表：DC Stock
+    # ------------------------------
 
     st.subheader("DC Stock Development")
 
@@ -111,15 +163,26 @@ if st.button("Run Production Planning"):
         monthly_summary_df,
         x="Month",
         y="End_Stock",
-        color="Product"
+        color="Product",
+        title="DC Stock"
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # -----------------------------
-    # Summary
-    # -----------------------------
+    # ------------------------------
+    # 下载结果
+    # ------------------------------
 
-    st.subheader("Planning Summary")
+    output_file = "planning_output.xlsx"
 
-    st.dataframe(summary_df)
+    with pd.ExcelWriter(output_file) as writer:
+        all_plan_df.to_excel(writer, sheet_name="All_Product_Plan", index=False)
+        monthly_summary_df.to_excel(writer, sheet_name="Monthly_Summary", index=False)
+        summary_df.to_excel(writer, sheet_name="Summary", index=False)
+
+    with open(output_file, "rb") as f:
+        st.download_button(
+            "Download Result Excel",
+            f,
+            file_name="planning_output.xlsx"
+        )
