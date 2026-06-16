@@ -35,14 +35,15 @@ def inject_app_style():
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
         :root {
-            --app-bg: #f7f8fa;
-            --panel-bg: rgba(255, 252, 246, 0.94);
+            --app-bg: #ffffff;
+            --panel-bg: #ffffff;
             --panel-border: #d9dee7;
+            --header-bg: #e8f1f6;
+            --index-bg: #f3f6f9;
             --ink: #17202a;
             --muted: #667085;
             --blue: #1f5f85;
             --teal: #087f8c;
-            --amber: #c97d22;
         }
 
         html, body, [class*="css"] {
@@ -61,7 +62,7 @@ def inject_app_style():
         }
 
         [data-testid="stSidebar"] {
-            background: #fbf7ef;
+            background: #ffffff;
             border-right: 1px solid var(--panel-border);
         }
 
@@ -71,7 +72,7 @@ def inject_app_style():
 
         .app-hero {
             border: 1px solid rgba(23, 32, 42, 0.09);
-            background: linear-gradient(135deg, rgba(255, 252, 246, 0.96), rgba(240, 247, 245, 0.90));
+            background: #ffffff;
             border-radius: 18px;
             padding: 26px 30px;
             box-shadow: 0 20px 45px rgba(38, 49, 63, 0.10);
@@ -122,9 +123,18 @@ def inject_app_style():
         }
 
         [data-testid="stDataFrame"] [role="columnheader"],
+        [data-testid="stDataEditor"] [role="columnheader"] {
+            background: var(--header-bg) !important;
+            color: var(--ink) !important;
+            border-bottom: 1px solid #b8c7d3 !important;
+            font-weight: 700 !important;
+        }
+
         [data-testid="stDataFrame"] [role="rowheader"],
-        [data-testid="stDataEditor"] [role="columnheader"],
         [data-testid="stDataEditor"] [role="rowheader"] {
+            background: var(--index-bg) !important;
+            color: var(--ink) !important;
+            border-right: 1px solid #c8d3dc !important;
             font-weight: 700 !important;
         }
 
@@ -494,43 +504,20 @@ def make_output_bytes(graph_outputs, wafer_start_table, stage_output_table):
 def style_display_table(output_df):
     numeric_cols = output_df.select_dtypes(include="number").columns.tolist()
 
-    def heatmap_column(column):
-        values = pd.to_numeric(column, errors="coerce")
-        min_value = values.min()
-        max_value = values.max()
-        if pd.isna(min_value) or pd.isna(max_value) or min_value == max_value:
-            return ["background-color: #f7fbff" for _ in column]
-
-        styles = []
-        for value in values:
-            if pd.isna(value):
-                styles.append("")
-                continue
-            strength = (value - min_value) / (max_value - min_value)
-            blue = int(245 - 55 * strength)
-            green = int(250 - 80 * strength)
-            red = int(255 - 120 * strength)
-            styles.append(f"background-color: rgb({red}, {green}, {blue})")
-        return styles
-
     def highlight_total(row):
         is_total = any(str(value) == "Grand Total" for value in row.values)
-        return ["background-color: #d9eaf7; font-weight: 700" if is_total else "" for _ in row]
+        return ["font-weight: 700" if is_total else "" for _ in row]
 
     styler = (
         output_df.style
         .format({col: "{:,.0f}" for col in numeric_cols})
         .set_table_styles([
-            {"selector": "th", "props": [("background-color", "#1f4e78"), ("color", "white"), ("font-weight", "700")]},
-            {"selector": "th.col_heading", "props": [("font-weight", "700")]},
-            {"selector": "th.row_heading", "props": [("font-weight", "700")]},
-            {"selector": "th.index_name", "props": [("font-weight", "700")]},
-            {"selector": "td", "props": [("border-color", "#d0d7de")]},
+            {"selector": "th", "props": [("background-color", "#e8f1f6"), ("color", "#17202a"), ("font-weight", "700"), ("border", "1px solid #c8d3dc")]},
+            {"selector": "th.row_heading", "props": [("background-color", "#f3f6f9"), ("font-weight", "700")]},
+            {"selector": "th.index_name", "props": [("background-color", "#f3f6f9"), ("font-weight", "700")]},
+            {"selector": "td", "props": [("background-color", "#ffffff"), ("border", "1px solid #d9dee7")]},
         ])
     )
-
-    if numeric_cols:
-        styler = styler.apply(heatmap_column, subset=numeric_cols, axis=0)
 
     return styler.apply(highlight_total, axis=1)
 
