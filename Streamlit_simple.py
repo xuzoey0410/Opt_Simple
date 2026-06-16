@@ -201,13 +201,14 @@ def build_wafer_start_table(monthly_summary_df):
 def build_stage_output_table(monthly_summary_df):
     metric_options = [
         ("Bump_Wafer", "Bump"),
-        ("Sort_Wafer", "Sort"),
-        ("Testing_Wafer", "Sort / Testing"),
+        ("Sort_Wafer", "Testing"),
+        ("Testing_Wafer", "Testing"),
         ("DPS_Chip", "DPS"),
         ("DPS_Output", "DPS"),
         ("Output", "DPS"),
     ]
     metric_map = {col: label for col, label in metric_options if col in monthly_summary_df.columns}
+    metric_order = {"Bump": 1, "Testing": 2, "DPS": 3}
 
     long_df = monthly_summary_df.melt(
         id_vars=["Basic_Type", "Product_Key", "Month"],
@@ -216,17 +217,27 @@ def build_stage_output_table(monthly_summary_df):
         value_name="Value",
     )
     long_df["Metric"] = long_df["Metric"].map(metric_map)
+    long_df["Metric_Order"] = long_df["Metric"].map(metric_order)
 
     table_df = long_df.pivot_table(
-        index=["Basic_Type", "Product_Key", "Metric"],
+        index=["Metric_Order", "Metric", "Basic_Type", "Product_Key"],
         columns="Month",
         values="Value",
         aggfunc="sum",
         fill_value=0,
-        margins=True,
-        margins_name="Grand Total",
     ).reset_index()
 
+    table_df = table_df.sort_values(["Metric_Order", "Basic_Type", "Product_Key"], kind="stable")
+    month_columns = [col for col in table_df.columns if col not in ["Metric_Order", "Metric", "Basic_Type", "Product_Key"]]
+    total_row = {
+        "Metric_Order": 99,
+        "Metric": "Grand Total",
+        "Basic_Type": "Grand Total",
+        "Product_Key": "Grand Total",
+    }
+    total_row.update({col: table_df[col].sum() for col in month_columns})
+    table_df = pd.concat([table_df, pd.DataFrame([total_row])], ignore_index=True)
+    table_df = table_df.drop(columns="Metric_Order")
     return table_df.rename(columns={"Basic_Type": "Basic Type", "Product_Key": "Row Labels"})
 
 
@@ -354,10 +365,20 @@ def make_output_bytes(graph_outputs, wafer_start_table, stage_output_table):
 
 def style_display_table(output_df):
     numeric_cols = output_df.select_dtypes(include="number").columns.tolist()
+    metric_colors = {
+        "Bump": "background-color: #eef7f2",
+        "Testing": "background-color: #eef3fb",
+        "DPS": "background-color: #fff6e8",
+    }
 
     def highlight_total(row):
         is_total = any(str(value) == "Grand Total" for value in row.values)
-        return ["font-weight: 700" if is_total else "" for _ in row]
+        if is_total:
+            return ["font-weight: 700; background-color: #f2f4f7" for _ in row]
+
+        metric = str(row.get("Metric", ""))
+        row_color = metric_colors.get(metric, "")
+        return [row_color for _ in row]
 
     return (
         output_df.style
