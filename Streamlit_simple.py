@@ -1,4 +1,5 @@
 from io import BytesIO
+from html import escape
 import importlib
 from pathlib import Path
 import sys
@@ -31,20 +32,65 @@ st.title("Output Simple Planner")
 st.markdown(
     """
     <style>
-    [data-testid="stDataEditor"] [role="columnheader"],
-    [data-testid="stDataFrame"] [role="columnheader"] {
-        background: #1f4e78 !important;
-        color: #ffffff !important;
-        font-weight: 700 !important;
-        border-bottom: 2px solid #163a59 !important;
+    .output-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        margin: 0.5rem 0 1.25rem;
     }
 
-    [data-testid="stDataEditor"] [role="rowheader"],
-    [data-testid="stDataFrame"] [role="rowheader"] {
-        background: #eef3f8 !important;
+    table.output-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+        background: #ffffff;
+    }
+
+    table.output-table th {
+        background: #1f4e78;
+        color: #ffffff;
+        font-weight: 700;
+        text-align: center;
+        padding: 0.5rem 0.65rem;
+        border: 1px solid #163a59;
+        white-space: nowrap;
+    }
+
+    table.output-table td {
+        background: #ffffff;
         color: #17202a !important;
-        font-weight: 700 !important;
-        border-right: 1px solid #c8d3dc !important;
+        padding: 0.45rem 0.65rem;
+        border: 1px solid #d0d7de;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    table.output-table td.row-name {
+        background: #eef3f8;
+        font-weight: 700;
+        text-align: left;
+    }
+
+    table.output-table tr.total-row td {
+        font-weight: 700;
+    }
+
+    .column-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin: 0.35rem 0 0.65rem;
+    }
+
+    .column-chip {
+        background: #1f4e78;
+        color: #ffffff;
+        border-radius: 6px;
+        padding: 0.25rem 0.55rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        line-height: 1.2;
     }
     </style>
     """,
@@ -165,6 +211,11 @@ def flow_editor_to_workbook_table(flow_df):
             })
 
     return pd.DataFrame(rows, columns=["Stages", "Time/Week", "Yield"])
+
+
+def show_column_strip(columns):
+    chips = "".join(f"<span class=\"column-chip\">{escape(str(column))}</span>" for column in columns)
+    st.markdown(f"<div class=\"column-strip\">{chips}</div>", unsafe_allow_html=True)
 
 
 def build_input_workbook(flow_df, product_df, demand_df, inventory_df, target_reach, tester_number):
@@ -377,22 +428,34 @@ def make_output_bytes(graph_outputs, wafer_start_table, stage_output_table):
 
 def style_display_table(output_df):
     numeric_cols = output_df.select_dtypes(include="number").columns.tolist()
+    label_cols = [col for col in output_df.columns if col not in numeric_cols]
 
-    def highlight_total(row):
+    def display_value(column, value):
+        if pd.isna(value):
+            return ""
+        if column in numeric_cols:
+            return f"{value:,.0f}"
+        return str(value)
+
+    header_html = "".join(f"<th>{escape(str(column))}</th>" for column in output_df.columns)
+    body_rows = []
+    for _, row in output_df.iterrows():
         is_total = any(str(value) == "Grand Total" for value in row.values)
-        return ["font-weight: 700" if is_total else "" for _ in row]
+        row_class = " class=\"total-row\"" if is_total else ""
+        cells = []
+        for column, value in row.items():
+            cell_class = " class=\"row-name\"" if column in label_cols else ""
+            cells.append(f"<td{cell_class}>{escape(display_value(column, value))}</td>")
+        body_rows.append(f"<tr{row_class}>{''.join(cells)}</tr>")
 
-    return (
-        output_df.style
-        .format({col: "{:,.0f}" for col in numeric_cols})
-        .set_table_styles([
-            {"selector": "th.col_heading", "props": [("background-color", "#1f4e78"), ("color", "#ffffff"), ("font-weight", "700"), ("border", "1px solid #163a59"), ("text-align", "center")]},
-            {"selector": "th.row_heading", "props": [("background-color", "#eef3f8"), ("color", "#17202a"), ("font-weight", "700"), ("border", "1px solid #c8d3dc")]},
-            {"selector": "th.index_name", "props": [("background-color", "#eef3f8"), ("color", "#17202a"), ("font-weight", "700"), ("border", "1px solid #c8d3dc")]},
-            {"selector": "td", "props": [("background-color", "#ffffff"), ("border", "1px solid #d0d7de")]},
-        ])
-        .apply(highlight_total, axis=1)
-    )
+    return f"""
+    <div class="output-table-wrap">
+        <table class="output-table">
+            <thead><tr>{header_html}</tr></thead>
+            <tbody>{''.join(body_rows)}</tbody>
+        </table>
+    </div>
+    """
 
 
 def draw_graphs(graph_outputs):
@@ -455,10 +518,13 @@ with st.sidebar:
 tabs = st.tabs(["Flow", "Product", "Demand", "Inventory"])
 with tabs[0]:
     st.caption("Transit time is shown as a column on each stage. When you run the plan, it will be converted back to Transist Time rows automatically.")
+    flow_editor_df = flow_to_editor_table(tables["flow"])
+    show_column_strip(flow_editor_df.columns)
     flow_df = st.data_editor(
-        flow_to_editor_table(tables["flow"]),
+        flow_editor_df,
         width="stretch",
         num_rows="dynamic",
+        hide_index=True,
         key="simple_flow",
         column_config={
             "Stage": st.column_config.TextColumn("Stage", help="Main process step, excluding transit rows."),
@@ -468,11 +534,14 @@ with tabs[0]:
         },
     )
 with tabs[1]:
-    product_df = st.data_editor(tables["product"], width="stretch", num_rows="dynamic", key="simple_product")
+    show_column_strip(tables["product"].columns)
+    product_df = st.data_editor(tables["product"], width="stretch", num_rows="dynamic", hide_index=True, key="simple_product")
 with tabs[2]:
-    demand_df = st.data_editor(tables["demand"], width="stretch", num_rows="dynamic", key="simple_demand")
+    show_column_strip(tables["demand"].columns)
+    demand_df = st.data_editor(tables["demand"], width="stretch", num_rows="dynamic", hide_index=True, key="simple_demand")
 with tabs[3]:
-    inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", key="simple_inventory")
+    show_column_strip(tables["inventory"].columns)
+    inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", hide_index=True, key="simple_inventory")
 
 if st.button("Run simple plan", type="primary"):
     with st.spinner("Running simple reach-based plan..."):
@@ -495,10 +564,10 @@ if st.button("Run simple plan", type="primary"):
     draw_graphs(graph_outputs)
 
     st.subheader("Wafer Start")
-    st.dataframe(style_display_table(wafer_start_table), width="stretch")
+    st.markdown(style_display_table(wafer_start_table), unsafe_allow_html=True)
 
     st.subheader("Bump Testing DPS")
-    st.dataframe(style_display_table(stage_output_table), width="stretch")
+    st.markdown(style_display_table(stage_output_table), unsafe_allow_html=True)
 
     with st.expander("Summary"):
         st.dataframe(summary_df, width="stretch")
