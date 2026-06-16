@@ -33,9 +33,9 @@ st.markdown(
     """
 <style>
 .block-container {
-    padding-top: 1.1rem;
+    padding-top: 1.0rem;
     padding-bottom: 2rem;
-    max-width: 1450px;
+    max-width: 1500px;
 }
 
 h1 {
@@ -93,50 +93,38 @@ section[data-testid="stSidebar"] {
     border-bottom: 3px solid #1F4E78;
 }
 
-/* Table / editor card feel */
-div[data-testid="stDataFrame"],
-div[data-testid="stDataEditor"] {
-    border-radius: 18px;
-    overflow: hidden;
-    border: 1px solid #e5edf5;
-    box-shadow: 0 4px 18px rgba(31, 78, 120, 0.06);
+/* Card-like containers */
+.control-card {
     background: white;
+    border: 1px solid #e5edf5;
+    border-radius: 18px;
+    padding: 1rem 1rem 0.8rem 1rem;
+    box-shadow: 0 4px 18px rgba(31, 78, 120, 0.05);
+    margin-bottom: 1rem;
 }
 
-div[data-testid="stDataFrame"] table,
-div[data-testid="stDataEditor"] table {
-    border-collapse: separate !important;
-    border-spacing: 0 !important;
+.section-card {
+    background: white;
+    border: 1px solid #e5edf5;
+    border-radius: 18px;
+    padding: 1rem;
+    box-shadow: 0 4px 18px rgba(31, 78, 120, 0.05);
+    margin-bottom: 1rem;
 }
 
-div[data-testid="stDataFrame"] thead th,
-div[data-testid="stDataEditor"] thead th {
-    background: linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%) !important;
-    color: #1f2937 !important;
-    font-weight: 700 !important;
-    border-bottom: 1px solid #dce7f2 !important;
-    padding-top: 12px !important;
-    padding-bottom: 12px !important;
+.section-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #1F4E78;
+    margin-bottom: 0.15rem;
 }
 
-div[data-testid="stDataFrame"] tbody td,
-div[data-testid="stDataEditor"] tbody td {
-    border-bottom: 1px solid #f0f4f8 !important;
-    padding-top: 10px !important;
-    padding-bottom: 10px !important;
+.section-subtitle {
+    font-size: 0.87rem;
+    color: #64748b;
+    margin-bottom: 0.75rem;
 }
 
-div[data-testid="stDataFrame"] tbody tr:nth-child(even),
-div[data-testid="stDataEditor"] tbody tr:nth-child(even) {
-    background-color: #fcfdff !important;
-}
-
-div[data-testid="stDataFrame"] tbody tr:hover,
-div[data-testid="stDataEditor"] tbody tr:hover {
-    background-color: #f4f9ff !important;
-}
-
-/* Metric cards */
 .metric-card {
     background: white;
     border: 1px solid #e5edf5;
@@ -158,25 +146,44 @@ div[data-testid="stDataEditor"] tbody tr:hover {
     color: #94a3b8;
 }
 
-/* Card wrapper for tables */
-.table-card {
-    background: white;
+/* Data editor / dataframe */
+div[data-testid="stDataFrame"],
+div[data-testid="stDataEditor"] {
+    border-radius: 16px;
+    overflow: hidden;
     border: 1px solid #e5edf5;
-    border-radius: 18px;
-    padding: 0.75rem;
-    box-shadow: 0 4px 18px rgba(31, 78, 120, 0.05);
-    margin-bottom: 1rem;
+    box-shadow: 0 3px 14px rgba(31, 78, 120, 0.05);
+    background: white;
 }
-.table-card-title {
-    font-size: 1.02rem;
-    font-weight: 700;
-    color: #1F4E78;
-    margin-bottom: 0.15rem;
+
+/* Reduce grid feeling */
+div[data-testid="stDataFrame"] table,
+div[data-testid="stDataEditor"] table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
 }
-.table-card-subtitle {
-    font-size: 0.86rem;
-    color: #64748b;
-    margin-bottom: 0.6rem;
+
+div[data-testid="stDataFrame"] thead th,
+div[data-testid="stDataEditor"] thead th {
+    background: linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%) !important;
+    color: #1f2937 !important;
+    font-weight: 700 !important;
+    border-bottom: 1px solid #dce7f2 !important;
+}
+
+div[data-testid="stDataFrame"] tbody td,
+div[data-testid="stDataEditor"] tbody td {
+    border-bottom: 1px solid #f0f4f8 !important;
+}
+
+div[data-testid="stDataFrame"] tbody tr:nth-child(even),
+div[data-testid="stDataEditor"] tbody tr:nth-child(even) {
+    background-color: #fcfdff !important;
+}
+
+div[data-testid="stDataFrame"] tbody tr:hover,
+div[data-testid="stDataEditor"] tbody tr:hover {
+    background-color: #f4f9ff !important;
 }
 </style>
 """,
@@ -194,12 +201,12 @@ st.markdown(
     padding: 18px 20px;
     border-radius: 16px;
     color: white;
-    margin-bottom: 20px;
+    margin-bottom: 18px;
     box-shadow: 0 4px 18px rgba(31,78,120,0.15);
 ">
-    <div style="font-size: 1.1rem; font-weight: 700;">Simple Planner Dashboard</div>
-    <div style="opacity: 0.9; margin-top: 4px;">
-        Upload Excel input, adjust planning parameters, run the planner, and export results with charts.
+    <div style="font-size: 1.1rem; font-weight: 700;">Interactive Planning Dashboard</div>
+    <div style="opacity: 0.92; margin-top: 4px;">
+        More control-panel style, less spreadsheet style.
     </div>
 </div>
 """,
@@ -486,10 +493,10 @@ def style_display_table(output_df):
 
 
 def render_table_card(title, subtitle, styled_df, height=430):
-    st.markdown(f"<div class='table-card-title'>{title}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
     if subtitle:
-        st.markdown(f"<div class='table-card-subtitle'>{subtitle}</div>", unsafe_allow_html=True)
-    st.markdown("<div class='table-card'>", unsafe_allow_html=True)
+        st.markdown(f"<div class='section-subtitle'>{subtitle}</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
     st.dataframe(styled_df, width="stretch", height=height)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -513,11 +520,7 @@ def draw_graphs(graph_outputs):
                 line={"color": "#d62728", "width": 3},
                 marker={"size": 8},
             )
-            chart.update_layout(
-                xaxis_title="Month",
-                yaxis_title="Stock / Next Month Demand",
-                margin=dict(l=20, r=20, t=50, b=20),
-            )
+            chart.update_layout(xaxis_title="Month", yaxis_title="Stock / Next Month Demand", margin=dict(l=20, r=20, t=50, b=20))
             st.plotly_chart(chart, use_container_width=True)
             continue
 
@@ -530,12 +533,12 @@ def draw_graphs(graph_outputs):
             chart = px.bar(chart_df, x="Row Labels", y=title, color="Product", title=title, template="plotly_white")
             chart.update_layout(barmode="stack")
 
-        chart.update_layout(
-            xaxis_title="Month",
-            yaxis_title=title,
-            margin=dict(l=20, r=20, t=50, b=20),
-        )
+        chart.update_layout(xaxis_title="Month", yaxis_title=title, margin=dict(l=20, r=20, t=50, b=20))
         st.plotly_chart(chart, use_container_width=True)
+
+
+def text_value(v):
+    return "" if pd.isna(v) else v
 
 
 # =========================
@@ -557,37 +560,128 @@ if tables is None:
 target_reach_default = float(target_value(tables["target"], "Target Reach Level", planner.DEFAULT_TESTER_CONFIG["target_REACH"]))
 tester_number_default = int(target_value(tables["target"], "Tester Number", planner.DEFAULT_TESTER_CONFIG["available"]))
 
-with st.sidebar:
-    st.header("Planning Inputs")
-    st.caption("Adjust parameters before running the plan.")
-    st.markdown("---")
+# =========================
+# Top control panel
+# =========================
+st.markdown("<div class='control-card'>", unsafe_allow_html=True)
+st.markdown("<div class='section-title'>Global Planning Controls</div>", unsafe_allow_html=True)
+st.markdown("<div class='section-subtitle'>Adjust key parameters first. Then edit inputs below.</div>", unsafe_allow_html=True)
+
+c1, c2 = st.columns(2)
+with c1:
     target_reach = st.number_input("Target Reach Level", min_value=0.0, value=target_reach_default, step=0.5)
+with c2:
     tester_number = st.number_input("Tester Number", min_value=1, value=tester_number_default, step=1)
-    st.markdown("---")
-    st.caption("Tip: upload a custom workbook to replace the sample input.")
 
+st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
-# Input tabs
+# Input mode
 # =========================
+edit_mode = st.radio("Input editor style", ["Card view", "Table view"], horizontal=True)
+
+# =========================
+# Edit flow / product / demand / inventory
+# =========================
+def edit_row_card(df, i, row, field_specs, prefix):
+    cols = st.columns([1] * len(field_specs))
+    for j, spec in enumerate(field_specs):
+        col_name = spec["col"]
+        label = spec.get("label", col_name)
+        kind = spec.get("kind", "text")
+        default = text_value(row[col_name])
+
+        with cols[j]:
+            if kind == "number":
+                if pd.isna(default) or default == "":
+                    default = 0.0
+                df.at[i, col_name] = st.number_input(
+                    label,
+                    value=float(default),
+                    key=f"{prefix}_{i}_{col_name}",
+                )
+            else:
+                df.at[i, col_name] = st.text_input(
+                    label,
+                    value=str(default),
+                    key=f"{prefix}_{i}_{col_name}",
+                )
+
+
 tabs = st.tabs(["Flow", "Product", "Demand", "Inventory"])
 
 with tabs[0]:
-    st.caption("Edit process steps, timing and yield settings.")
-    flow_df = st.data_editor(tables["flow"], width="stretch", num_rows="dynamic", key="simple_flow", hide_index=True)
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Flow</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-subtitle'>Edit stages and processing parameters.</div>", unsafe_allow_html=True)
+
+    if edit_mode == "Card view":
+        flow_df = tables["flow"].copy()
+        flow_fields = [
+            {"col": flow_df.columns[0], "label": flow_df.columns[0], "kind": "text"},
+            {"col": flow_df.columns[1], "label": flow_df.columns[1], "kind": "number"},
+            {"col": flow_df.columns[2], "label": flow_df.columns[2], "kind": "number"},
+            {"col": flow_df.columns[3], "label": flow_df.columns[3], "kind": "number"},
+        ]
+        for i, row in flow_df.iterrows():
+            with st.container(border=True):
+                st.markdown(f"**Step {i+1}**")
+                edit_row_card(flow_df, i, row, flow_fields, "flow")
+        st.caption("Tip: card view reduces spreadsheet feeling and improves readability.")
+    else:
+        flow_df = st.data_editor(tables["flow"], width="stretch", num_rows="dynamic", key="simple_flow", hide_index=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 with tabs[1]:
-    st.caption("Edit product master data.")
-    product_df = st.data_editor(tables["product"], width="stretch", num_rows="dynamic", key="simple_product", hide_index=True)
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Product</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-subtitle'>Edit product master data.</div>", unsafe_allow_html=True)
+
+    if edit_mode == "Card view":
+        product_df = tables["product"].copy()
+        # fallback to generic editable fields
+        field_specs = []
+        for col in product_df.columns[:4]:
+            if pd.api.types.is_numeric_dtype(product_df[col]):
+                field_specs.append({"col": col, "label": col, "kind": "number"})
+            else:
+                field_specs.append({"col": col, "label": col, "kind": "text"})
+
+        for i, row in product_df.iterrows():
+            with st.container(border=True):
+                st.markdown(f"**Product {i+1}**")
+                edit_row_card(product_df, i, row, field_specs, "product")
+    else:
+        product_df = st.data_editor(tables["product"], width="stretch", num_rows="dynamic", key="simple_product", hide_index=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 with tabs[2]:
-    st.caption("Adjust demand inputs.")
-    demand_df = st.data_editor(tables["demand"], width="stretch", num_rows="dynamic", key="simple_demand", hide_index=True)
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Demand</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-subtitle'>Adjust demand assumptions.</div>", unsafe_allow_html=True)
+
+    if edit_mode == "Card view":
+        demand_df = st.data_editor(tables["demand"], width="stretch", num_rows="dynamic", key="simple_demand", hide_index=True)
+        st.caption("For demand data with many columns, table view may still be more practical.")
+    else:
+        demand_df = st.data_editor(tables["demand"], width="stretch", num_rows="dynamic", key="simple_demand", hide_index=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 with tabs[3]:
-    st.caption("Update inventory assumptions and starting stock.")
-    inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", key="simple_inventory", hide_index=True)
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Inventory</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-subtitle'>Update inventory assumptions and starting stock.</div>", unsafe_allow_html=True)
 
+    if edit_mode == "Card view":
+        inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", key="simple_inventory", hide_index=True)
+        st.caption("Inventory often has many columns, so the table component is kept for usability.")
+    else:
+        inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", key="simple_inventory", hide_index=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
 # Run planner
@@ -613,7 +707,6 @@ if st.button("Run simple plan", type="primary"):
 
     st.success("Plan generated successfully")
 
-    # KPI cards
     total_products = len(product_df)
     total_demand = pd.to_numeric(demand_df.select_dtypes(include="number").sum().sum(), errors="coerce")
     total_output = pd.to_numeric(monthly_summary_df.get("Output", pd.Series(dtype=float)).sum(), errors="coerce")
