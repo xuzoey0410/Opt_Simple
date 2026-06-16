@@ -28,6 +28,29 @@ planner = importlib.import_module("Output_Simple")
 st.set_page_config(page_title="Output Simple Planner", layout="wide")
 st.title("Output Simple Planner")
 
+st.markdown(
+    """
+    <style>
+    [data-testid="stDataEditor"] [role="columnheader"],
+    [data-testid="stDataFrame"] [role="columnheader"] {
+        background: #1f4e78 !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        border-bottom: 2px solid #163a59 !important;
+    }
+
+    [data-testid="stDataEditor"] [role="rowheader"],
+    [data-testid="stDataFrame"] [role="rowheader"] {
+        background: #eef3f8 !important;
+        color: #17202a !important;
+        font-weight: 700 !important;
+        border-right: 1px solid #c8d3dc !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 def sheet_name(excel_file, target):
     lookup = {s.strip().lower(): s for s in excel_file.sheet_names}
@@ -363,7 +386,9 @@ def style_display_table(output_df):
         output_df.style
         .format({col: "{:,.0f}" for col in numeric_cols})
         .set_table_styles([
-            {"selector": "th", "props": [("background-color", "#eef3f8"), ("color", "#17202a"), ("font-weight", "700"), ("border", "1px solid #d0d7de")]},
+            {"selector": "th.col_heading", "props": [("background-color", "#1f4e78"), ("color", "#ffffff"), ("font-weight", "700"), ("border", "1px solid #163a59"), ("text-align", "center")]},
+            {"selector": "th.row_heading", "props": [("background-color", "#eef3f8"), ("color", "#17202a"), ("font-weight", "700"), ("border", "1px solid #c8d3dc")]},
+            {"selector": "th.index_name", "props": [("background-color", "#eef3f8"), ("color", "#17202a"), ("font-weight", "700"), ("border", "1px solid #c8d3dc")]},
             {"selector": "td", "props": [("background-color", "#ffffff"), ("border", "1px solid #d0d7de")]},
         ])
         .apply(highlight_total, axis=1)
