@@ -26,156 +26,7 @@ for candidate_dir in [APP_DIR, PROJECT_DIR]:
 planner = importlib.import_module("Output_Simple")
 
 st.set_page_config(page_title="Output Simple Planner", layout="wide")
-
-
-def inject_app_style():
-    st.markdown(
-        """
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
-
-        :root {
-            --app-bg: #ffffff;
-            --panel-bg: #ffffff;
-            --panel-border: #d9dee7;
-            --header-bg: #e8f1f6;
-            --index-bg: #f3f6f9;
-            --ink: #17202a;
-            --muted: #667085;
-            --blue: #1f5f85;
-            --teal: #087f8c;
-        }
-
-        html, body, [class*="css"] {
-            font-family: 'IBM Plex Sans', sans-serif;
-        }
-
-        .stApp {
-            color: var(--ink);
-            background: var(--app-bg);
-        }
-
-        .block-container {
-            max-width: 1420px;
-            padding-top: 1.4rem;
-            padding-bottom: 3rem;
-        }
-
-        [data-testid="stSidebar"] {
-            background: #ffffff;
-            border-right: 1px solid var(--panel-border);
-        }
-
-        [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-            color: var(--blue);
-        }
-
-        .app-hero {
-            border: 1px solid rgba(23, 32, 42, 0.09);
-            background: #ffffff;
-            border-radius: 18px;
-            padding: 26px 30px;
-            box-shadow: 0 20px 45px rgba(38, 49, 63, 0.10);
-            margin-bottom: 18px;
-        }
-
-        .app-kicker {
-            color: var(--teal);
-            font-size: 0.78rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            margin-bottom: 8px;
-        }
-
-        .app-title {
-            color: var(--ink);
-            font-size: clamp(2rem, 4vw, 3.4rem);
-            line-height: 1.02;
-            font-weight: 700;
-            letter-spacing: 0;
-            margin: 0;
-        }
-
-        .app-subtitle {
-            color: var(--muted);
-            font-size: 1rem;
-            margin-top: 10px;
-            max-width: 820px;
-        }
-
-        div[data-testid="stTabs"] button {
-            border-radius: 999px;
-            padding: 8px 16px;
-            font-weight: 600;
-        }
-
-        div[data-testid="stTabs"] [aria-selected="true"] {
-            color: #ffffff;
-            background: var(--blue);
-        }
-
-        [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
-            border: 1px solid var(--panel-border);
-            border-radius: 14px;
-            overflow: hidden;
-            box-shadow: 0 12px 30px rgba(38, 49, 63, 0.08);
-        }
-
-        [data-testid="stDataFrame"] [role="columnheader"],
-        [data-testid="stDataEditor"] [role="columnheader"] {
-            background: var(--header-bg) !important;
-            color: var(--ink) !important;
-            border-bottom: 1px solid #b8c7d3 !important;
-            font-weight: 700 !important;
-        }
-
-        [data-testid="stDataFrame"] [role="rowheader"],
-        [data-testid="stDataEditor"] [role="rowheader"] {
-            background: var(--index-bg) !important;
-            color: var(--ink) !important;
-            border-right: 1px solid #c8d3dc !important;
-            font-weight: 700 !important;
-        }
-
-        .stButton > button, .stDownloadButton > button {
-            border-radius: 999px;
-            font-weight: 700;
-            padding: 0.65rem 1.15rem;
-        }
-
-        .stButton > button[kind="primary"] {
-            background: linear-gradient(135deg, var(--blue), var(--teal));
-            border: 0;
-            box-shadow: 0 12px 24px rgba(31, 95, 133, 0.28);
-        }
-
-        div[data-testid="stPlotlyChart"] {
-            background: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            border-radius: 14px;
-            padding: 10px;
-            box-shadow: 0 12px 30px rgba(38, 49, 63, 0.08);
-        }
-
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-inject_app_style()
-
-st.markdown(
-    """
-    <div class="app-hero">
-        <div class="app-kicker">Demand Planning Workspace</div>
-        <h1 class="app-title">Output Simple Planner</h1>
-        <div class="app-subtitle">Edit planning inputs, run the reach-based model, and export the graph and production tables in one place.</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.title("Output Simple Planner")
 
 
 def sheet_name(excel_file, target):
@@ -504,20 +355,40 @@ def make_output_bytes(graph_outputs, wafer_start_table, stage_output_table):
 def style_display_table(output_df):
     numeric_cols = output_df.select_dtypes(include="number").columns.tolist()
 
+    def heatmap_column(column):
+        values = pd.to_numeric(column, errors="coerce")
+        min_value = values.min()
+        max_value = values.max()
+        if pd.isna(min_value) or pd.isna(max_value) or min_value == max_value:
+            return ["background-color: #f7fbff" for _ in column]
+
+        styles = []
+        for value in values:
+            if pd.isna(value):
+                styles.append("")
+                continue
+            strength = (value - min_value) / (max_value - min_value)
+            blue = int(245 - 55 * strength)
+            green = int(250 - 80 * strength)
+            red = int(255 - 120 * strength)
+            styles.append(f"background-color: rgb({red}, {green}, {blue})")
+        return styles
+
     def highlight_total(row):
         is_total = any(str(value) == "Grand Total" for value in row.values)
-        return ["font-weight: 700" if is_total else "" for _ in row]
+        return ["background-color: #d9eaf7; font-weight: 700" if is_total else "" for _ in row]
 
     styler = (
         output_df.style
         .format({col: "{:,.0f}" for col in numeric_cols})
         .set_table_styles([
-            {"selector": "th", "props": [("background-color", "#e8f1f6"), ("color", "#17202a"), ("font-weight", "700"), ("border", "1px solid #c8d3dc")]},
-            {"selector": "th.row_heading", "props": [("background-color", "#f3f6f9"), ("font-weight", "700")]},
-            {"selector": "th.index_name", "props": [("background-color", "#f3f6f9"), ("font-weight", "700")]},
-            {"selector": "td", "props": [("background-color", "#ffffff"), ("border", "1px solid #d9dee7")]},
+            {"selector": "th", "props": [("background-color", "#1f4e78"), ("color", "white"), ("font-weight", "700")]},
+            {"selector": "td", "props": [("border-color", "#d0d7de")]},
         ])
     )
+
+    if numeric_cols:
+        styler = styler.apply(heatmap_column, subset=numeric_cols, axis=0)
 
     return styler.apply(highlight_total, axis=1)
 
@@ -601,14 +472,7 @@ with tabs[2]:
 with tabs[3]:
     inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", key="simple_inventory")
 
-st.divider()
-run_col, download_hint_col = st.columns([1, 4], vertical_alignment="center")
-with run_col:
-    run_plan = st.button("Run simple plan", type="primary", width="stretch")
-with download_hint_col:
-    st.caption("Outputs appear below after the plan finishes.")
-
-if run_plan:
+if st.button("Run simple plan", type="primary"):
     with st.spinner("Running simple reach-based plan..."):
         try:
             input_path = build_input_workbook(flow_df, product_df, demand_df, inventory_df, target_reach, tester_number)
