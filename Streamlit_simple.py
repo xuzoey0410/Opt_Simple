@@ -33,7 +33,7 @@ st.markdown(
     """
 <style>
 .block-container {
-    padding-top: 1.4rem;
+    padding-top: 1.1rem;
     padding-bottom: 2rem;
     max-width: 1450px;
 }
@@ -45,7 +45,7 @@ h1 {
     margin-bottom: 0.2rem;
 }
 
-h2, h3 {
+h2, h3, h4 {
     color: #1F4E78;
 }
 
@@ -54,8 +54,9 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid #d9e2ec;
 }
 
+/* Buttons */
 .stButton > button {
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 0.55rem 1rem;
     font-weight: 600;
     border: none;
@@ -68,39 +69,79 @@ section[data-testid="stSidebar"] {
 }
 
 .stDownloadButton > button {
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 0.55rem 1rem;
     font-weight: 600;
 }
 
+/* Tabs */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
+    gap: 10px;
+    border-bottom: 1px solid #e6edf3;
+    padding-bottom: 2px;
 }
 .stTabs [data-baseweb="tab"] {
-    border-radius: 10px 10px 0 0;
-    padding: 0.6rem 1rem;
-    background: #f3f7fb;
+    border-radius: 14px 14px 0 0;
+    padding: 0.7rem 1.1rem;
+    background: #f7f9fc;
     font-weight: 600;
+    color: #475569;
 }
 .stTabs [aria-selected="true"] {
     background: white;
-    border-bottom: 2px solid #1F4E78;
+    color: #1F4E78;
+    border-bottom: 3px solid #1F4E78;
 }
 
-.streamlit-expanderHeader {
-    font-weight: 600;
-}
-
-div[data-testid="stDataFrame"] {
-    border-radius: 12px;
+/* Table / editor card feel */
+div[data-testid="stDataFrame"],
+div[data-testid="stDataEditor"] {
+    border-radius: 18px;
     overflow: hidden;
+    border: 1px solid #e5edf5;
+    box-shadow: 0 4px 18px rgba(31, 78, 120, 0.06);
+    background: white;
 }
 
+div[data-testid="stDataFrame"] table,
+div[data-testid="stDataEditor"] table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+}
+
+div[data-testid="stDataFrame"] thead th,
+div[data-testid="stDataEditor"] thead th {
+    background: linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%) !important;
+    color: #1f2937 !important;
+    font-weight: 700 !important;
+    border-bottom: 1px solid #dce7f2 !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+}
+
+div[data-testid="stDataFrame"] tbody td,
+div[data-testid="stDataEditor"] tbody td {
+    border-bottom: 1px solid #f0f4f8 !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+}
+
+div[data-testid="stDataFrame"] tbody tr:nth-child(even),
+div[data-testid="stDataEditor"] tbody tr:nth-child(even) {
+    background-color: #fcfdff !important;
+}
+
+div[data-testid="stDataFrame"] tbody tr:hover,
+div[data-testid="stDataEditor"] tbody tr:hover {
+    background-color: #f4f9ff !important;
+}
+
+/* Metric cards */
 .metric-card {
     background: white;
     border: 1px solid #e5edf5;
     padding: 1rem 1.1rem;
-    border-radius: 14px;
+    border-radius: 16px;
     box-shadow: 0 2px 10px rgba(31, 78, 120, 0.06);
 }
 .metric-label {
@@ -116,16 +157,36 @@ div[data-testid="stDataFrame"] {
     font-size: 0.8rem;
     color: #94a3b8;
 }
+
+/* Card wrapper for tables */
+.table-card {
+    background: white;
+    border: 1px solid #e5edf5;
+    border-radius: 18px;
+    padding: 0.75rem;
+    box-shadow: 0 4px 18px rgba(31, 78, 120, 0.05);
+    margin-bottom: 1rem;
+}
+.table-card-title {
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: #1F4E78;
+    margin-bottom: 0.15rem;
+}
+.table-card-subtitle {
+    font-size: 0.86rem;
+    color: #64748b;
+    margin-bottom: 0.6rem;
+}
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 # =========================
-# Header banner
+# Header
 # =========================
 st.title("Output Simple Planner")
-
 st.markdown(
     """
 <div style="
@@ -144,7 +205,6 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
 
 # =========================
 # Helpers
@@ -416,13 +476,22 @@ def style_display_table(output_df):
         output_df.style
         .format({col: "{:,.0f}" for col in numeric_cols})
         .set_table_styles([
-            {"selector": "th", "props": [("background-color", "#1f4e78"), ("color", "white"), ("font-weight", "700")]},
-            {"selector": "td", "props": [("border-color", "#d0d7de")]},
+            {"selector": "th", "props": [("background-color", "#f8fbff"), ("color", "#1f2937"), ("font-weight", "700")]},
+            {"selector": "td", "props": [("border-color", "#edf2f7")]},
         ])
     )
     if numeric_cols:
         styler = styler.apply(heatmap_column, subset=numeric_cols, axis=0)
     return styler.apply(highlight_total, axis=1)
+
+
+def render_table_card(title, subtitle, styled_df, height=430):
+    st.markdown(f"<div class='table-card-title'>{title}</div>", unsafe_allow_html=True)
+    if subtitle:
+        st.markdown(f"<div class='table-card-subtitle'>{subtitle}</div>", unsafe_allow_html=True)
+    st.markdown("<div class='table-card'>", unsafe_allow_html=True)
+    st.dataframe(styled_df, width="stretch", height=height)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def draw_graphs(graph_outputs):
@@ -504,13 +573,20 @@ with st.sidebar:
 tabs = st.tabs(["Flow", "Product", "Demand", "Inventory"])
 
 with tabs[0]:
-    flow_df = st.data_editor(tables["flow"], width="stretch", num_rows="dynamic", key="simple_flow")
+    st.caption("Edit process steps, timing and yield settings.")
+    flow_df = st.data_editor(tables["flow"], width="stretch", num_rows="dynamic", key="simple_flow", hide_index=True)
+
 with tabs[1]:
-    product_df = st.data_editor(tables["product"], width="stretch", num_rows="dynamic", key="simple_product")
+    st.caption("Edit product master data.")
+    product_df = st.data_editor(tables["product"], width="stretch", num_rows="dynamic", key="simple_product", hide_index=True)
+
 with tabs[2]:
-    demand_df = st.data_editor(tables["demand"], width="stretch", num_rows="dynamic", key="simple_demand")
+    st.caption("Adjust demand inputs.")
+    demand_df = st.data_editor(tables["demand"], width="stretch", num_rows="dynamic", key="simple_demand", hide_index=True)
+
 with tabs[3]:
-    inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", key="simple_inventory")
+    st.caption("Update inventory assumptions and starting stock.")
+    inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", key="simple_inventory", hide_index=True)
 
 
 # =========================
@@ -581,11 +657,9 @@ if st.button("Run simple plan", type="primary"):
 
     draw_graphs(graph_outputs)
 
-    st.subheader("Wafer Start")
-    st.dataframe(style_display_table(wafer_start_table), width="stretch", height=450)
-
-    st.subheader("Bump Testing DPS")
-    st.dataframe(style_display_table(stage_output_table), width="stretch", height=450)
+    st.subheader("Output Tables")
+    render_table_card("Wafer Start", "Monthly wafer start summary by product.", style_display_table(wafer_start_table), height=430)
+    render_table_card("Bump Testing DPS", "Stage output summary for bump / testing / DPS.", style_display_table(stage_output_table), height=430)
 
     with st.expander("Summary", expanded=False):
         st.dataframe(summary_df, width="stretch", height=400)
