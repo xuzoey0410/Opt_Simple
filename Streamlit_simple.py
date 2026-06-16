@@ -35,9 +35,9 @@ def inject_app_style():
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
         :root {
-            --app-bg: #f4f0e8;
+            --app-bg: #f7f8fa;
             --panel-bg: rgba(255, 252, 246, 0.94);
-            --panel-border: #ded3c2;
+            --panel-border: #d9dee7;
             --ink: #17202a;
             --muted: #667085;
             --blue: #1f5f85;
@@ -51,11 +51,7 @@ def inject_app_style():
 
         .stApp {
             color: var(--ink);
-            background:
-                linear-gradient(135deg, rgba(31, 95, 133, 0.10), transparent 34%),
-                linear-gradient(315deg, rgba(201, 125, 34, 0.13), transparent 28%),
-                radial-gradient(circle at 18% 12%, rgba(8, 127, 140, 0.12), transparent 24%),
-                var(--app-bg);
+            background: var(--app-bg);
         }
 
         .block-container {
@@ -123,6 +119,13 @@ def inject_app_style():
             border-radius: 14px;
             overflow: hidden;
             box-shadow: 0 12px 30px rgba(38, 49, 63, 0.08);
+        }
+
+        [data-testid="stDataFrame"] [role="columnheader"],
+        [data-testid="stDataFrame"] [role="rowheader"],
+        [data-testid="stDataEditor"] [role="columnheader"],
+        [data-testid="stDataEditor"] [role="rowheader"] {
+            font-weight: 700 !important;
         }
 
         .stButton > button, .stDownloadButton > button {
@@ -519,6 +522,9 @@ def style_display_table(output_df):
         .format({col: "{:,.0f}" for col in numeric_cols})
         .set_table_styles([
             {"selector": "th", "props": [("background-color", "#1f4e78"), ("color", "white"), ("font-weight", "700")]},
+            {"selector": "th.col_heading", "props": [("font-weight", "700")]},
+            {"selector": "th.row_heading", "props": [("font-weight", "700")]},
+            {"selector": "th.index_name", "props": [("font-weight", "700")]},
             {"selector": "td", "props": [("border-color", "#d0d7de")]},
         ])
     )
