@@ -1,5 +1,7 @@
 from io import BytesIO
+import importlib
 from pathlib import Path
+import sys
 import tempfile
 
 import pandas as pd
@@ -10,12 +12,18 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 
-import Output_Simple as planner
-
-
 APP_DIR = Path(__file__).parent
 SAMPLE_INPUT = APP_DIR / "input_sample.xlsx"
 LOCAL_INPUT = APP_DIR / "All_Output1.xlsx"
+PROJECT_DIR = Path.home() / "Desktop" / "Demand Project"
+PROJECT_SAMPLE_INPUT = PROJECT_DIR / "input_sample.xlsx"
+PROJECT_LOCAL_INPUT = PROJECT_DIR / "All_Output1.xlsx"
+
+for candidate_dir in [APP_DIR, PROJECT_DIR]:
+    if candidate_dir.exists() and str(candidate_dir) not in sys.path:
+        sys.path.insert(0, str(candidate_dir))
+
+planner = importlib.import_module("Output_Simple")
 
 st.set_page_config(page_title="Output Simple Planner", layout="wide")
 st.title("Output Simple Planner")
@@ -34,6 +42,10 @@ def load_tables(file_bytes):
         source = SAMPLE_INPUT
     elif LOCAL_INPUT.exists():
         source = LOCAL_INPUT
+    elif PROJECT_SAMPLE_INPUT.exists():
+        source = PROJECT_SAMPLE_INPUT
+    elif PROJECT_LOCAL_INPUT.exists():
+        source = PROJECT_LOCAL_INPUT
     else:
         return None
 
@@ -66,18 +78,86 @@ def target_value(target_df, key, default):
     return default if pd.isna(value) else value
 
 
+def flow_to_editor_table(flow_df):
+    df = planner.clean_columns(flow_df).dropna(how="all")
+    if df.empty:
+        return pd.DataFrame(columns=["Stage", "Cycle Time Week", "Transit Week", "Yield"])
+
+    stage_col = planner.find_col(df, ["Stages", "Stage", "Process", "Flow"])
+    week_col = planner.find_col(df, ["Time/Week", "Time Week", "Cycle_Time_Week", "Cycle Time Week"])
+    yield_col = planner.find_col(df, ["Yield", "Yield Rate"], required=False)
+
+    rows = []
+    for _, row in df.iterrows():
+        stage_value = row.get(stage_col)
+        if pd.isna(stage_value):
+            continue
+
+        stage_name = str(stage_value).strip()
+        stage_lower = stage_name.lower()
+        week_value = pd.to_numeric(row.get(week_col), errors="coerce")
+        week_value = 0 if pd.isna(week_value) else float(week_value)
+
+        if "transit" in stage_lower or "transist" in stage_lower:
+            if rows:
+                rows[-1]["Transit Week"] += week_value
+            continue
+
+        yield_value = pd.to_numeric(row.get(yield_col), errors="coerce") if yield_col else 1
+        rows.append({
+            "Stage": stage_name,
+            "Cycle Time Week": week_value,
+            "Transit Week": 0.0,
+            "Yield": 1.0 if pd.isna(yield_value) else float(yield_value),
+        })
+
+    return pd.DataFrame(rows, columns=["Stage", "Cycle Time Week", "Transit Week", "Yield"])
+
+
+def flow_editor_to_workbook_table(flow_df):
+    if not {"Stage", "Cycle Time Week", "Transit Week"}.issubset(flow_df.columns):
+        return flow_df
+
+    rows = []
+    for _, row in flow_df.dropna(how="all").iterrows():
+        stage_name = str(row.get("Stage", "")).strip()
+        if not stage_name:
+            continue
+
+        cycle_week = pd.to_numeric(row.get("Cycle Time Week"), errors="coerce")
+        transit_week = pd.to_numeric(row.get("Transit Week"), errors="coerce")
+        yield_value = pd.to_numeric(row.get("Yield"), errors="coerce")
+
+        rows.append({
+            "Stages": stage_name,
+            "Time/Week": 0 if pd.isna(cycle_week) else cycle_week,
+            "Yield": 1 if pd.isna(yield_value) else yield_value,
+        })
+
+        if not pd.isna(transit_week) and transit_week > 0:
+            rows.append({
+                "Stages": "Transist Time",
+                "Time/Week": transit_week,
+                "Yield": None,
+            })
+
+    return pd.DataFrame(rows, columns=["Stages", "Time/Week", "Yield"])
+
+
 def build_input_workbook(flow_df, product_df, demand_df, inventory_df, target_reach, tester_number):
     target_df = pd.DataFrame({
         "Columns": ["Target Reach Level", "Tester Number"],
         "Value": [target_reach, tester_number],
     })
 
+    flow_output_df = flow_editor_to_workbook_table(flow_df)
+
     temp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
     temp_path = Path(temp.name)
     temp.close()
 
     with pd.ExcelWriter(temp_path, engine="openpyxl") as writer:
-        flow_df.to_excel(writer, sheet_name=planner.FLOW_SHEET, index=False)
+        flow_output_df.to_excel(writer, sheet_name=planner.FLOW_SHEET, index=False)
         product_df.to_excel(writer, sheet_name=planner.PRODUCT_SHEET, index=False)
         demand_df.to_excel(writer, sheet_name=planner.DEMAND_SHEET, index=False)
         inventory_df.to_excel(writer, sheet_name=planner.INVENTORY_SHEET, index=False)
@@ -372,7 +452,19 @@ with st.sidebar:
 
 tabs = st.tabs(["Flow", "Product", "Demand", "Inventory"])
 with tabs[0]:
-    flow_df = st.data_editor(tables["flow"], width="stretch", num_rows="dynamic", key="simple_flow")
+    st.caption("Transit time is shown as a column on each stage. When you run the plan, it will be converted back to Transist Time rows automatically.")
+    flow_df = st.data_editor(
+        flow_to_editor_table(tables["flow"]),
+        width="stretch",
+        num_rows="dynamic",
+        key="simple_flow",
+        column_config={
+            "Stage": st.column_config.TextColumn("Stage", help="Main process step, excluding transit rows."),
+            "Cycle Time Week": st.column_config.NumberColumn("Cycle Time Week", min_value=0.0, step=1.0, format="%.0f"),
+            "Transit Week": st.column_config.NumberColumn("Transit Week", min_value=0.0, step=1.0, format="%.0f"),
+            "Yield": st.column_config.NumberColumn("Yield", min_value=0.0, max_value=1.0, step=0.001, format="%.3f"),
+        },
+    )
 with tabs[1]:
     product_df = st.data_editor(tables["product"], width="stretch", num_rows="dynamic", key="simple_product")
 with tabs[2]:
