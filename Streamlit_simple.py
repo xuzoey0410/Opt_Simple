@@ -26,7 +26,143 @@ for candidate_dir in [APP_DIR, PROJECT_DIR]:
 planner = importlib.import_module("Output_Simple")
 
 st.set_page_config(page_title="Output Simple Planner", layout="wide")
-st.title("Output Simple Planner")
+
+
+def inject_app_style():
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+        :root {
+            --app-bg: #f4f0e8;
+            --panel-bg: rgba(255, 252, 246, 0.94);
+            --panel-border: #ded3c2;
+            --ink: #17202a;
+            --muted: #667085;
+            --blue: #1f5f85;
+            --teal: #087f8c;
+            --amber: #c97d22;
+        }
+
+        html, body, [class*="css"] {
+            font-family: 'IBM Plex Sans', sans-serif;
+        }
+
+        .stApp {
+            color: var(--ink);
+            background:
+                linear-gradient(135deg, rgba(31, 95, 133, 0.10), transparent 34%),
+                linear-gradient(315deg, rgba(201, 125, 34, 0.13), transparent 28%),
+                radial-gradient(circle at 18% 12%, rgba(8, 127, 140, 0.12), transparent 24%),
+                var(--app-bg);
+        }
+
+        .block-container {
+            max-width: 1420px;
+            padding-top: 1.4rem;
+            padding-bottom: 3rem;
+        }
+
+        [data-testid="stSidebar"] {
+            background: #fbf7ef;
+            border-right: 1px solid var(--panel-border);
+        }
+
+        [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+            color: var(--blue);
+        }
+
+        .app-hero {
+            border: 1px solid rgba(23, 32, 42, 0.09);
+            background: linear-gradient(135deg, rgba(255, 252, 246, 0.96), rgba(240, 247, 245, 0.90));
+            border-radius: 18px;
+            padding: 26px 30px;
+            box-shadow: 0 20px 45px rgba(38, 49, 63, 0.10);
+            margin-bottom: 18px;
+        }
+
+        .app-kicker {
+            color: var(--teal);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .app-title {
+            color: var(--ink);
+            font-size: clamp(2rem, 4vw, 3.4rem);
+            line-height: 1.02;
+            font-weight: 700;
+            letter-spacing: 0;
+            margin: 0;
+        }
+
+        .app-subtitle {
+            color: var(--muted);
+            font-size: 1rem;
+            margin-top: 10px;
+            max-width: 820px;
+        }
+
+        div[data-testid="stTabs"] button {
+            border-radius: 999px;
+            padding: 8px 16px;
+            font-weight: 600;
+        }
+
+        div[data-testid="stTabs"] [aria-selected="true"] {
+            color: #ffffff;
+            background: var(--blue);
+        }
+
+        [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+            border: 1px solid var(--panel-border);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 12px 30px rgba(38, 49, 63, 0.08);
+        }
+
+        .stButton > button, .stDownloadButton > button {
+            border-radius: 999px;
+            font-weight: 700;
+            padding: 0.65rem 1.15rem;
+        }
+
+        .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, var(--blue), var(--teal));
+            border: 0;
+            box-shadow: 0 12px 24px rgba(31, 95, 133, 0.28);
+        }
+
+        div[data-testid="stPlotlyChart"] {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 14px;
+            padding: 10px;
+            box-shadow: 0 12px 30px rgba(38, 49, 63, 0.08);
+        }
+
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+inject_app_style()
+
+st.markdown(
+    """
+    <div class="app-hero">
+        <div class="app-kicker">Demand Planning Workspace</div>
+        <h1 class="app-title">Output Simple Planner</h1>
+        <div class="app-subtitle">Edit planning inputs, run the reach-based model, and export the graph and production tables in one place.</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def sheet_name(excel_file, target):
@@ -472,7 +608,14 @@ with tabs[2]:
 with tabs[3]:
     inventory_df = st.data_editor(tables["inventory"], width="stretch", num_rows="dynamic", key="simple_inventory")
 
-if st.button("Run simple plan", type="primary"):
+st.divider()
+run_col, download_hint_col = st.columns([1, 4], vertical_alignment="center")
+with run_col:
+    run_plan = st.button("Run simple plan", type="primary", width="stretch")
+with download_hint_col:
+    st.caption("Outputs appear below after the plan finishes.")
+
+if run_plan:
     with st.spinner("Running simple reach-based plan..."):
         try:
             input_path = build_input_workbook(flow_df, product_df, demand_df, inventory_df, target_reach, tester_number)
