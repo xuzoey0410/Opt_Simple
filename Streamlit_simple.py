@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -14,10 +15,12 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 
 APP_DIR = Path(__file__).parent
 SAMPLE_INPUT = APP_DIR / "input_sample.xlsx"
-LOCAL_INPUT = APP_DIR / "All_Output1.xlsx"
+LOCAL_INPUT = APP_DIR / "All_Input1.xlsx"
+LOCAL_OLD_INPUT = APP_DIR / "All_Output1.xlsx"
 PROJECT_DIR = Path.home() / "Desktop" / "Demand Project"
 PROJECT_SAMPLE_INPUT = PROJECT_DIR / "input_sample.xlsx"
-PROJECT_LOCAL_INPUT = PROJECT_DIR / "All_Output1.xlsx"
+PROJECT_LOCAL_INPUT = PROJECT_DIR / "All_Input1.xlsx"
+PROJECT_OLD_INPUT = PROJECT_DIR / "All_Output1.xlsx"
 
 for candidate_dir in [APP_DIR, PROJECT_DIR]:
     if candidate_dir.exists() and str(candidate_dir) not in sys.path:
@@ -42,10 +45,14 @@ def load_tables(file_bytes):
         source = SAMPLE_INPUT
     elif LOCAL_INPUT.exists():
         source = LOCAL_INPUT
+    elif LOCAL_OLD_INPUT.exists():
+        source = LOCAL_OLD_INPUT
     elif PROJECT_SAMPLE_INPUT.exists():
         source = PROJECT_SAMPLE_INPUT
     elif PROJECT_LOCAL_INPUT.exists():
         source = PROJECT_LOCAL_INPUT
+    elif PROJECT_OLD_INPUT.exists():
+        source = PROJECT_OLD_INPUT
     else:
         return None
 
@@ -241,12 +248,27 @@ def build_stage_output_table(monthly_summary_df):
     return table_df.rename(columns={"Basic_Type": "Basic Type", "Product_Key": "Row Labels"})
 
 
-def build_graph_outputs(monthly_summary_df):
+def calc_target_stock(demand_values, target_reach):
+    window = max(1, int(np.ceil(target_reach)))
+    target_values = []
+
+    for index in range(len(demand_values)):
+        future_demand = demand_values[index + 1:index + 1 + window]
+        if len(future_demand) == 0:
+            target_values.append(0)
+            continue
+        target_values.append(float(np.mean(future_demand)) * target_reach)
+
+    return target_values
+
+
+def build_graph_outputs(monthly_summary_df, target_reach):
     stock_df = build_month_product_table(monthly_summary_df, "End_Stock", "sum")
     demand_df = build_month_product_table(monthly_summary_df, "Demand", "sum")
     month_rows = demand_df["Row Labels"].astype(str) != "Grand Total"
-    stock_df["Next Month Demand"] = 0
-    stock_df.loc[month_rows, "Next Month Demand"] = demand_df.loc[month_rows, "Grand Total"].shift(-1).fillna(0).values
+    stock_df["Target Stock"] = 0.0
+    demand_values = demand_df.loc[month_rows, "Grand Total"].astype(float).tolist()
+    stock_df.loc[month_rows, "Target Stock"] = calc_target_stock(demand_values, target_reach)
 
     return [
         ("Tester Used", build_month_product_table(monthly_summary_df, "Max_TesterUsed", "sum"), "bar"),
@@ -307,7 +329,8 @@ def add_table_block(worksheet, title, output_df, start_row):
 
 def add_excel_chart(worksheet, title, chart_kind, header_row, last_row, last_col, anchor):
     headers = [worksheet.cell(row=header_row, column=col).value for col in range(1, last_col + 1)]
-    overlay_col = headers.index("Next Month Demand") + 1 if "Next Month Demand" in headers else None
+    overlay_candidates = ["Target Stock", "Next Month Demand"]
+    overlay_col = next((headers.index(col) + 1 for col in overlay_candidates if col in headers), None)
     chart_last_col = overlay_col - 1 if overlay_col else last_col
     if worksheet.cell(row=header_row, column=chart_last_col).value == "Grand Total":
         chart_last_col -= 1
@@ -337,7 +360,7 @@ def add_excel_chart(worksheet, title, chart_kind, header_row, last_row, last_col
         line_chart.add_data(line_data, titles_from_data=True)
         line_chart.set_categories(categories)
         line_chart.y_axis.axId = 200
-        line_chart.y_axis.title = "Next Month Demand"
+        line_chart.y_axis.title = worksheet.cell(row=header_row, column=overlay_col).value
         chart += line_chart
 
     worksheet.add_chart(chart, anchor)
@@ -397,20 +420,20 @@ def draw_graphs(graph_outputs):
         chart_df = graph_df[graph_df["Row Labels"].astype(str) != "Grand Total"].copy()
 
         if chart_kind == "stock":
-            demand_line = chart_df[["Row Labels", "Next Month Demand"]].copy()
-            product_cols = [col for col in chart_df.columns if col not in ["Row Labels", "Grand Total", "Next Month Demand"]]
+            target_line = chart_df[["Row Labels", "Target Stock"]].copy()
+            product_cols = [col for col in chart_df.columns if col not in ["Row Labels", "Grand Total", "Target Stock"]]
             chart_df = chart_df.melt(id_vars="Row Labels", value_vars=product_cols, var_name="Product", value_name=title)
             chart = px.bar(chart_df, x="Row Labels", y=title, color="Product", title=title)
             chart.update_layout(barmode="stack")
             chart.add_scatter(
-                x=demand_line["Row Labels"],
-                y=demand_line["Next Month Demand"],
+                x=target_line["Row Labels"],
+                y=target_line["Target Stock"],
                 mode="lines+markers",
-                name="Next Month Demand",
+                name="Target Stock",
                 line={"color": "#d62728", "width": 3},
                 marker={"size": 8},
             )
-            chart.update_layout(xaxis_title="Month", yaxis_title="Stock / Next Month Demand")
+            chart.update_layout(xaxis_title="Month", yaxis_title="Stock / Target Stock")
             st.plotly_chart(chart, width="stretch")
             continue
 
@@ -481,7 +504,7 @@ if st.button("Run simple plan", type="primary"):
             st.stop()
 
     all_plan_df, summary_df, monthly_summary_df, skipped_df = results
-    graph_outputs = build_graph_outputs(monthly_summary_df)
+    graph_outputs = build_graph_outputs(monthly_summary_df, target_reach)
     wafer_start_table = build_wafer_start_table(monthly_summary_df)
     stage_output_table = build_stage_output_table(monthly_summary_df)
     output_bytes = make_output_bytes(graph_outputs, wafer_start_table, stage_output_table)
