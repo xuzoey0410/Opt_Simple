@@ -4,7 +4,6 @@ from pathlib import Path
 import sys
 import tempfile
 
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -248,16 +247,27 @@ def build_stage_output_table(monthly_summary_df):
     return table_df.rename(columns={"Basic_Type": "Basic Type", "Product_Key": "Row Labels"})
 
 
-def calc_target_stock(demand_values, target_reach):
-    window = max(1, int(np.ceil(target_reach)))
+def calc_target_stock(month_labels, demand_values, target_reach):
     target_values = []
 
     for index in range(len(demand_values)):
-        future_demand = demand_values[index + 1:index + 1 + window]
-        if len(future_demand) == 0:
-            target_values.append(0)
-            continue
-        target_values.append(float(np.mean(future_demand)) * target_reach)
+        remaining_weeks = float(target_reach)
+        target_stock = 0.0
+
+        for future_index in range(index + 1, len(demand_values)):
+            if remaining_weeks <= 0:
+                break
+
+            month_weeks = planner.month_to_weeks(month_labels[future_index])
+            if month_weeks <= 0:
+                continue
+
+            covered_weeks = min(remaining_weeks, month_weeks)
+            weekly_demand = float(demand_values[future_index]) / month_weeks
+            target_stock += weekly_demand * covered_weeks
+            remaining_weeks -= covered_weeks
+
+        target_values.append(target_stock)
 
     return target_values
 
@@ -267,8 +277,9 @@ def build_graph_outputs(monthly_summary_df, target_reach):
     demand_df = build_month_product_table(monthly_summary_df, "Demand", "sum")
     month_rows = demand_df["Row Labels"].astype(str) != "Grand Total"
     stock_df["Target Stock"] = 0.0
+    month_labels = demand_df.loc[month_rows, "Row Labels"].tolist()
     demand_values = demand_df.loc[month_rows, "Grand Total"].astype(float).tolist()
-    stock_df.loc[month_rows, "Target Stock"] = calc_target_stock(demand_values, target_reach)
+    stock_df.loc[month_rows, "Target Stock"] = calc_target_stock(month_labels, demand_values, target_reach)
 
     return [
         ("Tester Used", build_month_product_table(monthly_summary_df, "Max_TesterUsed", "sum"), "bar"),
