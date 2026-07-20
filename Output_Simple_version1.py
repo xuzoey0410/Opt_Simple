@@ -2,10 +2,6 @@ from pathlib import Path
 import re
 import numpy as np
 import pandas as pd
-from openpyxl.chart import BarChart, LineChart, Reference
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
-from openpyxl.utils.dataframe import dataframe_to_rows
 INPUT_EXCEL = Path(r"C:\Users\xuzi\Desktop\Demand Project\All_Input1.xlsx")
 OUTPUT_EXCEL = Path(r"C:\Users\xuzi\Desktop\Demand Project\multi_product_output_simple.xlsx")
 
@@ -114,124 +110,6 @@ def is_month_col(c):
         return False
 
 
-def style_excel_range(worksheet, header_row, last_row, last_col, freeze=True):
-    header_fill = PatternFill("solid", fgColor="1F4E78")
-    total_fill = PatternFill("solid", fgColor="D9EAF7")
-    metric_fill = PatternFill("solid", fgColor="EAF3F8")
-    white_font = Font(color="FFFFFF", bold=True)
-    bold_font = Font(bold=True)
-    thin_side = Side(style="thin", color="D0D7DE")
-    border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-    headers = [str(worksheet.cell(row=header_row, column=col).value or "") for col in range(1, last_col + 1)]
-
-    def apply_number_format(cell, row_values):
-        if cell.column <= 1 or isinstance(cell.value, bool) or pd.isna(cell.value):
-            return
-        value = pd.to_numeric(cell.value, errors="coerce")
-        if pd.isna(value):
-            return
-
-        context = " ".join([headers[cell.column - 1], *[str(row_cell.value or "") for row_cell in row_values[:3]]]).lower()
-        if "reach" in context or "yield" in context or "tester" in context:
-            cell.number_format = "#,##0.00"
-        else:
-            cell.value = int(round(float(value)))
-            cell.number_format = "#,##0"
-
-    for cell in worksheet[header_row]:
-        if cell.column <= last_col:
-            cell.fill = header_fill
-            cell.font = white_font
-            cell.alignment = Alignment(horizontal="center")
-            cell.border = border
-
-    for row in worksheet.iter_rows(min_row=header_row + 1, max_row=last_row, max_col=last_col):
-        is_total_row = any(str(cell.value) == "Grand Total" for cell in row[:3])
-        for cell in row:
-            cell.border = border
-            cell.alignment = Alignment(horizontal="center")
-            apply_number_format(cell, row)
-            if is_total_row:
-                cell.fill = total_fill
-                cell.font = bold_font
-            elif cell.column <= 3:
-                cell.fill = metric_fill
-
-    if freeze:
-        worksheet.freeze_panes = worksheet.cell(row=header_row + 1, column=2)
-    for column_index in range(1, last_col + 1):
-        max_len = max(
-            len(str(worksheet.cell(row=row_index, column=column_index).value or ""))
-            for row_index in range(header_row, last_row + 1)
-        )
-        worksheet.column_dimensions[get_column_letter(column_index)].width = min(max(max_len + 2, 11), 18)
-
-
-def add_table_block(worksheet, title, output_df, start_row, freeze=True):
-    worksheet.cell(row=start_row, column=1, value=title)
-    worksheet.cell(row=start_row, column=1).font = Font(bold=True, size=14, color="1F4E78")
-    header_row = start_row + 1
-
-    for row_index, row_values in enumerate(dataframe_to_rows(output_df, index=False, header=True), header_row):
-        for column_index, value in enumerate(row_values, 1):
-            worksheet.cell(row=row_index, column=column_index, value=value)
-
-    style_excel_range(worksheet, header_row, header_row + len(output_df), len(output_df.columns), freeze=freeze)
-    return header_row, header_row + len(output_df), len(output_df.columns)
-
-
-def add_excel_chart(worksheet, title, chart_kind, header_row, last_row, last_col, anchor):
-    headers = [worksheet.cell(row=header_row, column=col).value for col in range(1, last_col + 1)]
-    overlay_candidates = ["Target Stock", "Tester Capacity", "Next Month Demand"]
-    overlay_col = next((headers.index(col) + 1 for col in overlay_candidates if col in headers), None)
-    chart_last_col = overlay_col - 1 if overlay_col else last_col
-    if worksheet.cell(row=header_row, column=chart_last_col).value == "Grand Total":
-        chart_last_col -= 1
-    chart_last_row = last_row
-    if worksheet.cell(row=chart_last_row, column=1).value == "Grand Total":
-        chart_last_row -= 1
-    if chart_last_col < 2 or chart_last_row <= header_row:
-        return
-
-    chart_map = {"bar": BarChart, "line": LineChart, "stock": BarChart, "tester": BarChart, "reach_tester": LineChart}
-    chart = chart_map[chart_kind]()
-    chart.title = title
-    chart.height = 10
-    chart.width = 20
-
-    data = Reference(worksheet, min_col=2, max_col=chart_last_col, min_row=header_row, max_row=chart_last_row)
-    categories = Reference(worksheet, min_col=1, min_row=header_row + 1, max_row=chart_last_row)
-    chart.add_data(data, titles_from_data=True)
-    chart.set_categories(categories)
-
-    if chart_kind in ["bar", "stock", "tester"]:
-        chart.type = "col"
-        chart.style = 10
-        if chart_kind == "tester":
-            chart.grouping = "stacked"
-            chart.overlap = 100
-
-    if chart_kind in ["stock", "tester", "reach_tester"] and overlay_col:
-        line_chart = LineChart()
-        line_data = Reference(worksheet, min_col=overlay_col, max_col=overlay_col, min_row=header_row, max_row=chart_last_row)
-        line_chart.add_data(line_data, titles_from_data=True)
-        line_chart.set_categories(categories)
-        line_chart.y_axis.axId = 200
-        line_chart.y_axis.title = worksheet.cell(row=header_row, column=overlay_col).value
-        chart += line_chart
-
-    if chart_kind in ["line", "reach_tester"] and title == "Reach Level":
-        chart.y_axis.scaling.min = 0
-        chart.y_axis.scaling.max = 6
-        chart.y_axis.majorUnit = 1
-
-    worksheet.add_chart(chart, anchor)
-
-
-def style_excel_sheet(worksheet):
-    style_excel_range(worksheet, 1, worksheet.max_row, worksheet.max_column)
-
-
 def month_label(x):
     if isinstance(x, pd.Timestamp):
         return x.strftime("%Y-%m")
@@ -336,10 +214,6 @@ def load_products_from_excel(excel_path: Path, sheet_name: str = PRODUCT_SHEET):
     basic_col = find_col(df, ["Basic Type", "Basic_Type", "Type"], required=False)
     cpw_col = find_col(df, ["CPW"])
     priority_col = find_col(df, ["Priority", "Priority Score", "Priority_Score"], required=False)
-    total_yield_col = find_col(df, ["Total Yield", "Total_Yield", "Yield", "Product Yield"], required=False)
-    min_reach_col = find_col(df, ["Min Reach Level", "Min Reach", "Min_REACH", "Min ReachLevel"], required=False)
-    target_reach_col = find_col(df, ["Target Reach Level", "Target Reach", "Target_REACH", "Target ReachLevel"], required=False)
-    max_reach_col = find_col(df, ["Max Reach Level", "Max Reach", "Max_REACH", "Max ReachLevel"], required=False)
     weekly_output_col = find_col(
         df,
         [
@@ -369,11 +243,6 @@ def load_products_from_excel(excel_path: Path, sheet_name: str = PRODUCT_SHEET):
         if product_key in products:
             continue
 
-        total_yield = normalize_yield(row[total_yield_col]) if total_yield_col and not pd.isna(row[total_yield_col]) else None
-        min_reach = pd.to_numeric(row[min_reach_col], errors="coerce") if min_reach_col else np.nan
-        target_reach = pd.to_numeric(row[target_reach_col], errors="coerce") if target_reach_col else np.nan
-        max_reach = pd.to_numeric(row[max_reach_col], errors="coerce") if max_reach_col else np.nan
-
         products[product_key] = {
             "Product_Key": product_key,
             "Original_Product": str(row[product_col]).strip(),
@@ -381,10 +250,6 @@ def load_products_from_excel(excel_path: Path, sheet_name: str = PRODUCT_SHEET):
             "Priority": float(pd.to_numeric(row[priority_col], errors="coerce")) if priority_col and not pd.isna(pd.to_numeric(row[priority_col], errors="coerce")) else 0.0,
             "CPW": float(cpw),
             "weekly_output": float(weekly_output),
-            "Total_Yield": total_yield,
-            "min_REACH": None if pd.isna(min_reach) else float(min_reach),
-            "target_REACH": None if pd.isna(target_reach) else float(target_reach),
-            "max_REACH": None if pd.isna(max_reach) else float(max_reach),
         }
 
     if not products:
@@ -515,13 +380,11 @@ def load_all_inputs(excel_path: Path):
     )
 
 def get_total_params(stages, products, product):
-    product_total_yield = products[product].get("Total_Yield")
-    total_yield = float(product_total_yield) if product_total_yield is not None and not pd.isna(product_total_yield) else 1.0
+    total_yield = 1.0
     total_lt = 0
 
     for stage, params in stages.items():
-        if product_total_yield is None or pd.isna(product_total_yield):
-            total_yield *= params["yield"]
+        total_yield *= params["yield"]
         total_lt += params["cycle_time"] + params["transit"]
 
     return {
@@ -531,13 +394,6 @@ def get_total_params(stages, products, product):
         "cpw": products[product]["CPW"],
         "weekly_out": products[product]["weekly_output"],
     }
-
-
-def product_reach_value(context, tester_config, key):
-    value = context.get(key)
-    if value is not None and not pd.isna(value):
-        return float(value)
-    return float(tester_config.get(key, 0))
 
 
 def get_stage_start_offset(stages, keywords):
@@ -689,16 +545,12 @@ def calc_reach_4week_avg(stock, demand, window=4, start_idx=0, end_idx=None):
 
 
 def calc_future_target_stock(context, week, tester_config):
-    return calc_future_stock_for_reach(context, week, tester_config, "target_REACH")
-
-
-def calc_future_stock_for_reach(context, week, tester_config, reach_key):
     demand = context["demand"]
     known_start_idx = context["known_start_idx"]
     forecast_start_idx = context["forecast_start_idx"]
     reach_end_idx = context["reach_end_idx"]
     reach_window = int(tester_config["reach_window"])
-    target_reach = product_reach_value(context, tester_config, reach_key)
+    target_reach = float(tester_config["target_REACH"])
 
     if context["limited_wafer_start"] or week >= known_start_idx:
         end = min(week + reach_window, reach_end_idx)
@@ -722,16 +574,16 @@ def calc_reach_basis(context, week, tester_config):
         end = min(week + reach_window, context["reach_end_idx"])
         future_avg = demand.iloc[week:end].mean()
     else:
-        coverage_weeks = max(reach_window, int(np.ceil(product_reach_value(context, tester_config, "target_REACH") * 2)))
+        coverage_weeks = max(reach_window, int(np.ceil(float(tester_config.get("target_REACH", 0)) * 2)))
         coverage_end = min(context["known_start_idx"] + coverage_weeks, context["forecast_start_idx"])
         future_avg = demand.iloc[context["known_start_idx"]:coverage_end].mean()
 
     return 0.0 if pd.isna(future_avg) else float(future_avg)
 
 
-def calc_allocation_score(current_reach, priority, tester_config, context=None):
-    min_reach = product_reach_value(context, tester_config, "min_REACH") if context else float(tester_config.get("min_REACH", 0))
-    target_reach = product_reach_value(context, tester_config, "target_REACH") if context else float(tester_config.get("target_REACH", 0))
+def calc_allocation_score(current_reach, priority, tester_config):
+    min_reach = float(tester_config.get("min_REACH", 0))
+    target_reach = float(tester_config.get("target_REACH", 0))
     min_gap = max(0.0, min_reach - current_reach)
     target_gap = max(0.0, target_reach - current_reach)
     return (1000.0 * min_gap) + (100.0 * target_gap) + float(priority)
@@ -755,346 +607,14 @@ def choose_testing_week(request, tester_usage_by_week, tester_config):
     return best_week, max(0, best_remaining)
 
 
-def build_allocation_requests(ordered_products, contexts, products, tester_config, week, reach_key, request_type):
-    requests = []
-
-    for product in ordered_products:
-        context = contexts[product]
-        demand = context["demand"]
-        params = context["params"]
-        if week >= len(demand):
-            continue
-        if week >= context["forecast_start_idx"]:
-            continue
-        if week < context["known_start_idx"]:
-            continue
-
-        prev_stock = context["stock"][week - 1] if week > 0 else context["init_stock"]
-        effective_stock = prev_stock + context["dps_out"][week]
-        lag = int(params["output_lag"])
-        source_week = week - lag
-        if source_week < 0:
-            continue
-
-        future_avg = calc_reach_basis(context, week, tester_config)
-        current_reach = effective_stock / future_avg if future_avg > 0 else np.inf
-        max_reach = product_reach_value(context, tester_config, "max_REACH")
-        if current_reach >= max_reach:
-            continue
-
-        target_stock = calc_future_stock_for_reach(context, week, tester_config, reach_key)
-        output_per_wafer = params["cpw"] * params["total_yield"]
-        if output_per_wafer <= 0:
-            continue
-
-        required_output = max(0, demand.iloc[week] + target_stock - effective_stock)
-        desired_wafer = int(np.ceil(required_output / output_per_wafer))
-        if desired_wafer <= 0:
-            continue
-
-        testing_week = source_week + context["testing_offset"]
-        priority = products[product].get("Priority", 0)
-        requests.append({
-            "product": product,
-            "source_week": source_week,
-            "demand_week": week,
-            "testing_week": testing_week,
-            "desired_wafer": desired_wafer,
-            "weekly_out": params["weekly_out"],
-            "output_per_wafer": output_per_wafer,
-            "testing_offset": context["testing_offset"],
-            "allocation_score": calc_allocation_score(current_reach, priority, tester_config, context),
-            "priority": priority,
-            "request_type": request_type,
-            "current_reach": current_reach,
-            "required_output": required_output,
-            "target_stock": target_stock,
-        })
-
-    requests.sort(key=lambda item: (-item["allocation_score"], -item["priority"], item["product"]))
-    return requests
-
-
-def allocate_tester_requests(requests, contexts, products, tester_usage_by_week, tester_config, shortage_rows, earliest_rows):
-    capacity = int(tester_config["available"])
-
-    for request in requests:
-        if request["weekly_out"] <= 0:
-            continue
-
-        desired_testers = int(np.ceil(request["desired_wafer"] / request["weekly_out"]))
-        testing_week, remaining_testers = choose_testing_week(request, tester_usage_by_week, tester_config)
-        if remaining_testers <= 0:
-            allocated_wafer = 0
-            allocated_testers = 0
-        else:
-            allocated_testers = min(desired_testers, remaining_testers)
-            allocated_wafer = int(min(request["desired_wafer"], np.floor(allocated_testers * request["weekly_out"])))
-            allocated_testers = int(np.ceil(allocated_wafer / request["weekly_out"])) if allocated_wafer > 0 else 0
-
-        context = contexts[request["product"]]
-        source_week = testing_week - context["testing_offset"]
-        context["wafer"][source_week] += allocated_wafer
-        context["dps_out"][request["demand_week"]] += allocated_wafer * request["output_per_wafer"]
-        tester_usage_by_week[testing_week] = tester_usage_by_week.get(testing_week, 0) + allocated_testers
-
-        if request["request_type"] == "Min Reach":
-            product_params = products[request["product"]]
-            shortage_testers = max(0, desired_testers - allocated_testers)
-            earliest_rows.append({
-                "Product_Key": request["product"],
-                "Basic_Type": product_params.get("Basic_Type", ""),
-                "Product": product_params.get("Original_Product", request["product"]),
-                "Demand_Week": request["demand_week"] + 1,
-                "Demand_Month": context["months"][request["demand_week"]],
-                "Required_Wafer_Start_Week": request["source_week"] + 1,
-                "Allocated_Wafer_Start_Week": source_week + 1 if allocated_wafer > 0 else np.nan,
-                "Required_Testing_Week": request["testing_week"] + 1,
-                "Allocated_Testing_Week": testing_week + 1 if allocated_wafer > 0 else np.nan,
-                "Required_Wafer": request["desired_wafer"],
-                "Allocated_Wafer": allocated_wafer,
-                "Required_Tester": desired_testers,
-                "Allocated_Tester": allocated_testers,
-                "Current_REACH": round(request["current_reach"], 2) if np.isfinite(request["current_reach"]) else np.nan,
-                "Min_REACH": product_reach_value(context, tester_config, "min_REACH"),
-                "Tester_Capacity": capacity,
-                "Reason": "Protect Min Reach",
-            })
-            if shortage_testers > 0:
-                shortage_rows.append({
-                    "Product_Key": request["product"],
-                    "Basic_Type": product_params.get("Basic_Type", ""),
-                    "Product": product_params.get("Original_Product", request["product"]),
-                    "Demand_Week": request["demand_week"] + 1,
-                    "Demand_Month": context["months"][request["demand_week"]],
-                    "Required_Wafer_Start_Week": request["source_week"] + 1,
-                    "Allocated_Wafer_Start_Week": source_week + 1 if allocated_wafer > 0 else np.nan,
-                    "Required_Testing_Week": request["testing_week"] + 1,
-                    "Allocated_Testing_Week": testing_week + 1 if allocated_wafer > 0 else np.nan,
-                    "Required_Tester": desired_testers,
-                    "Allocated_Tester": allocated_testers,
-                    "Shortage_Tester": shortage_testers,
-                    "Required_Wafer": request["desired_wafer"],
-                    "Allocated_Wafer": allocated_wafer,
-                    "Current_REACH": round(request["current_reach"], 2) if np.isfinite(request["current_reach"]) else np.nan,
-                    "Min_REACH": product_reach_value(context, tester_config, "min_REACH"),
-                    "Tester_Capacity": capacity,
-                })
-
-
-def reset_context_state(contexts):
-    for context in contexts.values():
-        n = len(context["demand"])
-        context["wafer"] = np.zeros(n)
-        context["dps_out"] = np.zeros(n)
-        context["stock"] = np.zeros(n)
-
-
-def recompute_context_stock(context):
-    demand = context["demand"]
-    for week in range(len(demand)):
-        prev_stock = context["stock"][week - 1] if week > 0 else context["init_stock"]
-        context["stock"][week] = max(0, prev_stock + context["dps_out"][week] - demand.iloc[week])
-
-
-def allocate_request_by_capacity(
-    request,
-    contexts,
-    products,
-    tester_usage_by_week,
-    tester_config,
-    advance_weeks,
-    compulsory=False,
-    rows=None,
-    shortage_rows=None,
-    reserved_usage_by_week=None,
-    protected_usage_by_week=None,
-    usage_log_by_week=None,
-):
-    capacity = int(tester_config["available"])
-    context = contexts[request["product"]]
-    product_params = products[request["product"]]
-    nominal_testing_week = int(request["testing_week"])
-    earliest_testing_week = max(int(request["testing_offset"]), nominal_testing_week - int(advance_weeks))
-    remaining_wafer = int(request["desired_wafer"])
-    required_tester = int(np.ceil(remaining_wafer / request["weekly_out"])) if request["weekly_out"] > 0 else 0
-    allocated_wafer_total = 0
-    allocated_tester_total = 0
-    allocated_testing_weeks = []
-    allocated_source_weeks = []
-
-    for testing_week in range(nominal_testing_week, earliest_testing_week - 1, -1):
-        if remaining_wafer <= 0:
-            break
-
-        protected_usage = 0
-        if reserved_usage_by_week is not None:
-            protected_usage = max(
-                0,
-                reserved_usage_by_week.get(testing_week, 0) - (protected_usage_by_week or {}).get(testing_week, 0),
-            )
-        remaining_capacity = capacity - tester_usage_by_week.get(testing_week, 0) - protected_usage
-        if remaining_capacity <= 0:
-            continue
-
-        needed_tester = int(np.ceil(remaining_wafer / request["weekly_out"]))
-        allocated_tester = min(needed_tester, remaining_capacity)
-        allocated_wafer = int(min(remaining_wafer, np.floor(allocated_tester * request["weekly_out"])))
-        if allocated_wafer <= 0:
-            continue
-
-        allocated_tester = int(np.ceil(allocated_wafer / request["weekly_out"]))
-        source_week = testing_week - context["testing_offset"]
-        dps_week = source_week + int(context["params"]["output_lag"])
-        context["wafer"][source_week] += allocated_wafer
-        context["dps_out"][dps_week] += allocated_wafer * request["output_per_wafer"]
-        tester_usage_by_week[testing_week] = tester_usage_by_week.get(testing_week, 0) + allocated_tester
-        if usage_log_by_week is not None:
-            usage_log_by_week[testing_week] = usage_log_by_week.get(testing_week, 0) + allocated_tester
-
-        remaining_wafer -= allocated_wafer
-        allocated_wafer_total += allocated_wafer
-        allocated_tester_total += allocated_tester
-        allocated_testing_weeks.append(testing_week + 1)
-        allocated_source_weeks.append(source_week + 1)
-
-    shortage_tester = max(0, required_tester - allocated_tester_total)
-    if compulsory and rows is not None:
-        rows.append({
-            "Product_Key": request["product"],
-            "Basic_Type": product_params.get("Basic_Type", ""),
-            "Product": product_params.get("Original_Product", request["product"]),
-            "Demand_Week": request["demand_week"] + 1,
-            "Demand_Month": context["months"][request["demand_week"]],
-            "Required_Wafer_Start_Week": request["source_week"] + 1,
-            "Earliest_Allocated_Wafer_Start_Week": min(allocated_source_weeks) if allocated_source_weeks else np.nan,
-            "Required_Testing_Week": nominal_testing_week + 1,
-            "Earliest_Allocated_Testing_Week": min(allocated_testing_weeks) if allocated_testing_weeks else np.nan,
-            "Latest_Allocated_Testing_Week": max(allocated_testing_weeks) if allocated_testing_weeks else np.nan,
-            "Pulled_Ahead_Weeks": (nominal_testing_week + 1 - min(allocated_testing_weeks)) if allocated_testing_weeks else np.nan,
-            "Required_Wafer": request["desired_wafer"],
-            "Allocated_Wafer": allocated_wafer_total,
-            "Required_Tester": required_tester,
-            "Allocated_Tester": allocated_tester_total,
-            "Current_REACH": round(request["current_reach"], 2) if np.isfinite(request["current_reach"]) else np.nan,
-            "Min_REACH": product_reach_value(context, tester_config, "min_REACH"),
-            "Tester_Capacity": capacity,
-            "Minimum_Advance_Weeks_Used": int(advance_weeks),
-            "Reason": "Protect Min Reach",
-        })
-    if compulsory and shortage_tester > 0 and shortage_rows is not None:
-        shortage_rows.append({
-            "Product_Key": request["product"],
-            "Basic_Type": product_params.get("Basic_Type", ""),
-            "Product": product_params.get("Original_Product", request["product"]),
-            "Demand_Week": request["demand_week"] + 1,
-            "Demand_Month": context["months"][request["demand_week"]],
-            "Required_Wafer_Start_Week": request["source_week"] + 1,
-            "Required_Testing_Week": nominal_testing_week + 1,
-            "Required_Tester": required_tester,
-            "Allocated_Tester": allocated_tester_total,
-            "Shortage_Tester": shortage_tester,
-            "Required_Wafer": request["desired_wafer"],
-            "Allocated_Wafer": allocated_wafer_total,
-            "Current_REACH": round(request["current_reach"], 2) if np.isfinite(request["current_reach"]) else np.nan,
-            "Min_REACH": product_reach_value(context, tester_config, "min_REACH"),
-            "Tester_Capacity": capacity,
-            "Advance_Weeks_Tried": int(advance_weeks),
-        })
-
-
-def run_min_reach_pass(contexts, ordered_products, products, tester_config, max_weeks, advance_weeks):
-    reset_context_state(contexts)
-    tester_usage_by_week = {}
-    shortage_rows = []
-    earliest_rows = []
-
-    for week in range(max_weeks):
-        requests = build_allocation_requests(ordered_products, contexts, products, tester_config, week, "min_REACH", "Min Reach")
-        for request in requests:
-            allocate_request_by_capacity(
-                request,
-                contexts,
-                products,
-                tester_usage_by_week,
-                tester_config,
-                advance_weeks,
-                compulsory=True,
-                rows=earliest_rows,
-                shortage_rows=shortage_rows,
-            )
-
-        for product in ordered_products:
-            recompute_context_stock(contexts[product])
-
-    return tester_usage_by_week, pd.DataFrame(shortage_rows), pd.DataFrame(earliest_rows)
-
-
-def allocate_target_reach(contexts, ordered_products, products, tester_config, max_weeks, tester_usage_by_week):
-    target_advance_weeks = int(tester_config.get("tester_smoothing_weeks", 0))
-    for week in range(max_weeks):
-        requests = build_allocation_requests(ordered_products, contexts, products, tester_config, week, "target_REACH", "Target Reach")
-        for request in requests:
-            allocate_request_by_capacity(
-                request,
-                contexts,
-                products,
-                tester_usage_by_week,
-                tester_config,
-                target_advance_weeks,
-                compulsory=False,
-            )
-
-        for product in ordered_products:
-            recompute_context_stock(contexts[product])
-
-
-def run_reserved_final_plan(contexts, ordered_products, products, tester_config, max_weeks, min_reserved_usage_by_week, min_advance_weeks):
-    reset_context_state(contexts)
-    tester_usage_by_week = {}
-    min_usage_by_week = {}
-    target_advance_weeks = int(tester_config.get("tester_smoothing_weeks", 0))
-
-    for week in range(max_weeks):
-        min_requests = build_allocation_requests(ordered_products, contexts, products, tester_config, week, "min_REACH", "Min Reach")
-        for request in min_requests:
-            allocate_request_by_capacity(
-                request,
-                contexts,
-                products,
-                tester_usage_by_week,
-                tester_config,
-                min_advance_weeks,
-                usage_log_by_week=min_usage_by_week,
-            )
-
-        target_requests = build_allocation_requests(ordered_products, contexts, products, tester_config, week, "target_REACH", "Target Reach")
-        for request in target_requests:
-            allocate_request_by_capacity(
-                request,
-                contexts,
-                products,
-                tester_usage_by_week,
-                tester_config,
-                target_advance_weeks,
-                reserved_usage_by_week=min_reserved_usage_by_week,
-                protected_usage_by_week=min_usage_by_week,
-            )
-
-        for product in ordered_products:
-            recompute_context_stock(contexts[product])
-
-    return tester_usage_by_week
-
-
-def build_product_context(product, stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map, extra_pre_weeks=0):
+def build_product_context(product, stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map):
     weekly_demand = weekly_demand_map[product]
     months = month_label_map[product]
     init_stock = float(inventory_map.get(product, 0))
     params = get_total_params(stages, products, product)
     bump_offset = get_stage_start_offset(stages, ["bump"])
     testing_offset = get_stage_start_offset(stages, ["testing", "test"])
-    pre_weeks = get_wafer_start_pre_weeks(params, tester_config, len(weekly_demand)) + max(0, int(extra_pre_weeks))
+    pre_weeks = get_wafer_start_pre_weeks(params, tester_config, len(weekly_demand))
     demand_opt, months_ext, known_start_idx, forecast_start_idx, reach_end_idx = build_planning_horizon(
         weekly_demand,
         months,
@@ -1114,9 +634,6 @@ def build_product_context(product, stages, products, weekly_demand_map, month_la
         "reach_end_idx": reach_end_idx,
         "limited_wafer_start": has_wafer_start_limit(tester_config),
         "init_stock": init_stock,
-        "min_REACH": products[product].get("min_REACH"),
-        "target_REACH": products[product].get("target_REACH"),
-        "max_REACH": products[product].get("max_REACH"),
         "wafer": np.zeros(n),
         "dps_out": np.zeros(n),
         "stock": np.zeros(n),
@@ -1159,9 +676,6 @@ def build_plan_from_context(context, products, tester_config):
         "DPS_Out_to_DC": dps_out.astype(int),
         "Stock": stock.astype(int),
         "REACH_4W_Avg": reach.values,
-        "Min_REACH_Setting": product_reach_value(context, tester_config, "min_REACH"),
-        "Target_REACH_Setting": product_reach_value(context, tester_config, "target_REACH"),
-        "Max_REACH_Setting": product_reach_value(context, tester_config, "max_REACH"),
     })
 
     plan_output = plan.iloc[:context["forecast_start_idx"]].copy()
@@ -1173,10 +687,6 @@ def build_plan_from_context(context, products, tester_config):
         "Basic_Type": products[product].get("Basic_Type", ""),
         "Product": products[product].get("Original_Product", product),
         "Priority": products[product].get("Priority", 0),
-        "Min_REACH_Setting": product_reach_value(context, tester_config, "min_REACH"),
-        "Target_REACH_Setting": product_reach_value(context, tester_config, "target_REACH"),
-        "Max_REACH_Setting": product_reach_value(context, tester_config, "max_REACH"),
-        "Total_Yield": params["total_yield"],
         "Total_Weeks": len(plan_output),
         "Known_Demand_Weeks": len(plan_known),
         "Initial_Stock": int(round(context["init_stock"])),
@@ -1204,9 +714,6 @@ def build_plan_from_context(context, products, tester_config):
             Max_TesterUsed=("TesterUsed", "max"),
             End_Stock=("Stock", "last"),
             Avg_REACH=("REACH_4W_Avg", "mean"),
-            Min_REACH_Setting=("Min_REACH_Setting", "first"),
-            Target_REACH_Setting=("Target_REACH_Setting", "first"),
-            Max_REACH_Setting=("Max_REACH_Setting", "first"),
         )
         .reset_index()
     )
@@ -1215,56 +722,93 @@ def build_plan_from_context(context, products, tester_config):
 
 
 def run_shared_tester_plan(product_keys, stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map):
-    def make_contexts(extra_pre_weeks=0):
-        return {
-            product: build_product_context(product, stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map, extra_pre_weeks=extra_pre_weeks)
-            for product in product_keys
-        }
-
-    base_contexts = make_contexts()
-    base_max_weeks = max(len(context["demand"]) for context in base_contexts.values())
+    contexts = {
+        product: build_product_context(product, stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map)
+        for product in product_keys
+    }
+    max_weeks = max(len(context["demand"]) for context in contexts.values())
+    tester_usage_by_week = {}
     ordered_products = sorted(
         product_keys,
         key=lambda item: (-products[item].get("Priority", 0), item),
     )
-    max_advance_weeks = base_max_weeks
-    best_result = None
 
-    for advance_weeks in range(max_advance_weeks + 1):
-        trial_contexts = make_contexts(extra_pre_weeks=advance_weeks)
-        trial_max_weeks = max(len(context["demand"]) for context in trial_contexts.values())
-        tester_usage_by_week, shortage_df, earliest_df = run_min_reach_pass(
-            trial_contexts,
-            ordered_products,
-            products,
-            tester_config,
-            trial_max_weeks,
-            advance_weeks,
-        )
-        best_result = (advance_weeks, trial_contexts, trial_max_weeks, tester_usage_by_week, shortage_df, earliest_df)
-        if shortage_df.empty:
-            break
+    for week in range(max_weeks):
+        requests = []
 
-    min_advance_weeks, contexts, max_weeks, tester_usage_by_week, shortage_df, earliest_df = best_result
-    if not earliest_df.empty:
-        earliest_df["Minimum_Advance_Weeks_Needed"] = min_advance_weeks
-    if not shortage_df.empty:
-        shortage_df["Minimum_Advance_Weeks_Tried"] = min_advance_weeks
+        for product in ordered_products:
+            context = contexts[product]
+            demand = context["demand"]
+            params = context["params"]
+            if week >= len(demand):
+                continue
+            if week >= context["forecast_start_idx"]:
+                continue
 
-    if shortage_df.empty:
-        contexts = make_contexts(extra_pre_weeks=min_advance_weeks)
-        max_weeks = max(len(context["demand"]) for context in contexts.values())
-        run_reserved_final_plan(
-            contexts,
-            ordered_products,
-            products,
-            tester_config,
-            max_weeks,
-            tester_usage_by_week,
-            min_advance_weeks,
-        )
-    else:
-        allocate_target_reach(contexts, ordered_products, products, tester_config, max_weeks, tester_usage_by_week)
+            prev_stock = context["stock"][week - 1] if week > 0 else context["init_stock"]
+            lag = int(params["output_lag"])
+            source_week = week - lag
+            if source_week < 0:
+                continue
+
+            target_stock = calc_future_target_stock(context, week, tester_config)
+            output_per_wafer = params["cpw"] * params["total_yield"]
+            if output_per_wafer <= 0:
+                continue
+
+            future_avg = calc_reach_basis(context, week, tester_config)
+            current_reach = prev_stock / future_avg if future_avg > 0 else np.inf
+            max_reach = float(tester_config.get("max_REACH", np.inf))
+            if current_reach >= max_reach:
+                continue
+
+            required_output = max(0, demand.iloc[week] + target_stock - prev_stock)
+            desired_wafer = int(np.ceil(required_output / output_per_wafer))
+            if desired_wafer <= 0:
+                continue
+
+            testing_week = source_week + context["testing_offset"]
+            priority = products[product].get("Priority", 0)
+            requests.append({
+                "product": product,
+                "source_week": source_week,
+                "testing_week": testing_week,
+                "desired_wafer": desired_wafer,
+                "weekly_out": params["weekly_out"],
+                "output_per_wafer": output_per_wafer,
+                "testing_offset": context["testing_offset"],
+                "allocation_score": calc_allocation_score(current_reach, priority, tester_config),
+                "priority": priority,
+            })
+
+        requests.sort(key=lambda item: (-item["allocation_score"], -item["priority"], item["product"]))
+
+        for request in requests:
+            if request["weekly_out"] <= 0:
+                continue
+            testing_week, remaining_testers = choose_testing_week(request, tester_usage_by_week, tester_config)
+            if remaining_testers <= 0:
+                allocated_wafer = 0
+                allocated_testers = 0
+            else:
+                desired_testers = int(np.ceil(request["desired_wafer"] / request["weekly_out"]))
+                allocated_testers = min(desired_testers, remaining_testers)
+                allocated_wafer = int(min(request["desired_wafer"], np.floor(allocated_testers * request["weekly_out"])))
+                allocated_testers = int(np.ceil(allocated_wafer / request["weekly_out"])) if allocated_wafer > 0 else 0
+
+            context = contexts[request["product"]]
+            source_week = testing_week - context["testing_offset"]
+            context["wafer"][source_week] += allocated_wafer
+            context["dps_out"][week] += allocated_wafer * request["output_per_wafer"]
+            tester_usage_by_week[testing_week] = tester_usage_by_week.get(testing_week, 0) + allocated_testers
+
+        for product in ordered_products:
+            context = contexts[product]
+            demand = context["demand"]
+            if week >= len(demand):
+                continue
+            prev_stock = context["stock"][week - 1] if week > 0 else context["init_stock"]
+            context["stock"][week] = max(0, prev_stock + context["dps_out"][week] - demand.iloc[week])
 
     plans = []
     summaries = []
@@ -1276,7 +820,7 @@ def run_shared_tester_plan(product_keys, stages, products, weekly_demand_map, mo
         summaries.append(summary)
         monthly_summaries.append(monthly_summary)
 
-    return plans, summaries, monthly_summaries, shortage_df, earliest_df
+    return plans, summaries, monthly_summaries
 
 
 def run_unconstrained_tester_plan(product_keys, stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map):
@@ -1336,7 +880,7 @@ def run_unconstrained_tester_plan(product_keys, stages, products, weekly_demand_
     return plans, summaries, monthly_summaries
 
 
-def run_all_products(stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map, include_diagnostics=False):
+def run_all_products(stages, products, weekly_demand_map, month_label_map, tester_config, inventory_map):
     skipped_products = []
     successful_products = []
 
@@ -1364,7 +908,7 @@ def run_all_products(stages, products, weekly_demand_map, month_label_map, teste
     for product in successful_products:
         print(f"Running product: {product}")
 
-    plans, summaries, monthly_summaries, min_shortage_df, earliest_start_df = run_shared_tester_plan(
+    plans, summaries, monthly_summaries = run_shared_tester_plan(
         successful_products,
         stages,
         products,
@@ -1378,9 +922,6 @@ def run_all_products(stages, products, weekly_demand_map, month_label_map, teste
     summary_df = pd.DataFrame(summaries)
     monthly_summary_df = pd.concat(monthly_summaries, ignore_index=True)
     skipped_df = pd.DataFrame(skipped_products)
-
-    if include_diagnostics:
-        return all_plan_df, summary_df, monthly_summary_df, skipped_df, min_shortage_df, earliest_start_df
 
     return all_plan_df, summary_df, monthly_summary_df, skipped_df
 
